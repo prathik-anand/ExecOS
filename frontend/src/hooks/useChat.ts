@@ -1,89 +1,69 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useAuth } from './useAuth';
 
-export type SSEEventType =
-    | 'routing'
-    | 'agent_reasoning'
-    | 'agent_response'
-    | 'synthesis_start'
-    | 'synthesis'
-    | 'onboarding_question'
-    | 'onboarding_complete'
-    | 'done'
-    | 'error';
-
-export interface SSEEvent {
-    type: SSEEventType;
-    content?: string;
-    agent?: string;
-    agent_name?: string;
-    agent_emoji?: string;
-    agent_color?: string;
-    agents?: string[];
-    step?: number;
-    total?: number;
-    question?: {
-        id: string;
-        question: string;
-        field: string;
-        placeholder?: string;
-        options?: string[];
-        skip_label?: string;
-    };
+export interface SubQueryInfo {
+    id: string;
+    focus: string;
+    agents: string[];
 }
 
 export interface ChatMessage {
     id: string;
-    role: 'user' | 'assistant' | 'routing' | 'onboarding';
+    role: 'user' | 'assistant' | 'routing' | 'orchestration';
     content: string;
-    events?: SSEEvent[];
-    agentKey?: string;
-    agentName?: string;
-    agentEmoji?: string;
-    agentColor?: string;
+    agent?: string;
+    agent_name?: string;
+    agent_emoji?: string;
+    agent_color?: string;
     isSynthesis?: boolean;
-    timestamp: Date;
+    // orchestration metadata
+    intent?: string;
+    complexity?: string;
+    sub_queries?: SubQueryInfo[];
+    reasoning?: string;
 }
 
-export function useChat(sessionId: string, onEvent?: (event: SSEEvent) => void) {
+type SSEEventCallback = (event: Record<string, unknown>) => void;
+
+export function useChat(onEvent?: SSEEventCallback) {
+    const { token } = useAuth();
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
-    const abortRef = useRef<AbortController | null>(null);
+    const [sessionId, setSessionId] = useState<string | null>(null);
+
+    const addMessage = useCallback((msg: Omit<ChatMessage, 'id'>) => {
+        const id = crypto.randomUUID();
+        setMessages((prev) => [...prev, { ...msg, id }]);
+        return id;
+    }, []);
 
     const sendMessage = useCallback(
         async (text: string) => {
-            if (isStreaming) return;
+            if (!text.trim() || isStreaming || !token) return;
 
-            // Add user message
-            if (text.trim()) {
-                const userMsg: ChatMessage = {
-                    id: `user-${Date.now()}`,
-                    role: 'user',
-                    content: text,
-                    timestamp: new Date(),
-                };
-                setMessages((prev) => [...prev, userMsg]);
-            }
-
+            addMessage({ role: 'user', content: text });
             setIsStreaming(true);
-            abortRef.current = new AbortController();
-
-            const collectedEvents: SSEEvent[] = [];
-            let agentMessages: Record<string, string> = {};
-            let synthesisContent = '';
-            let routingMsg: ChatMessage | null = null;
 
             try {
-                const response = await fetch('/api/chat', {
+                const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Session-ID': sessionId,
+                        Authorization: `Bearer ${token}`,
                     },
-                    body: JSON.stringify({ message: text }),
-                    signal: abortRef.current.signal,
+                    body: JSON.stringify({ message: text, session_id: sessionId }),
                 });
 
-                const reader = response.body!.getReader();
+                // Capture session ID from response header
+                const newSessionId = res.headers.get('X-Session-ID');
+                if (newSessionId) setSessionId(newSessionId);
+
+                if (!res.ok || !res.body) {
+                    addMessage({ role: 'assistant', content: 'Error connecting to the Boardroom. Please try again.' });
+                    return;
+                }
+
+                const reader = res.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
 
@@ -98,85 +78,53 @@ export function useChat(sessionId: string, onEvent?: (event: SSEEvent) => void) 
                     for (const line of lines) {
                         if (!line.startsWith('data: ')) continue;
                         try {
-                            const event: SSEEvent = JSON.parse(line.slice(6));
-                            collectedEvents.push(event);
+                            const event: Record<string, unknown> = JSON.parse(line.slice(6));
                             onEvent?.(event);
 
-                            if (event.type === 'routing' && event.agents) {
-                                routingMsg = {
-                                    id: `routing-${Date.now()}`,
-                                    role: 'routing',
-                                    content: event.content || '',
-                                    agents: event.agents,
-                                    timestamp: new Date(),
-                                } as ChatMessage & { agents: string[] };
-                                setMessages((prev) => [...prev, routingMsg!]);
-                            } else if (event.type === 'agent_response' && event.agent) {
-                                agentMessages[event.agent] = event.content || '';
-                                const agentMsg: ChatMessage = {
-                                    id: `agent-${event.agent}-${Date.now()}`,
+                            if (event.type === 'orchestration') {
+                                addMessage({
+                                    role: 'orchestration',
+                                    content: event.content as string,
+                                    intent: event.intent as string,
+                                    complexity: event.complexity as string,
+                                    sub_queries: event.sub_queries as SubQueryInfo[],
+                                    reasoning: event.reasoning as string,
+                                });
+                            } else if (event.type === 'routing') {
+                                addMessage({ role: 'routing', content: event.content as string });
+                            } else if (event.type === 'agent_response') {
+                                addMessage({
                                     role: 'assistant',
-                                    content: event.content || '',
-                                    agentKey: event.agent,
-                                    agentName: event.agent_name,
-                                    agentEmoji: event.agent_emoji,
-                                    agentColor: event.agent_color,
-                                    isSynthesis: false,
-                                    events: collectedEvents,
-                                    timestamp: new Date(),
-                                };
-                                setMessages((prev) => {
-                                    // update or add
-                                    const existing = prev.findIndex((m) => m.agentKey === event.agent && !m.isSynthesis);
-                                    if (existing >= 0) {
-                                        const next = [...prev];
-                                        next[existing] = agentMsg;
-                                        return next;
-                                    }
-                                    return [...prev, agentMsg];
+                                    content: event.content as string,
+                                    agent: event.agent as string,
+                                    agent_name: event.agent_name as string,
+                                    agent_emoji: event.agent_emoji as string,
+                                    agent_color: event.agent_color as string,
                                 });
                             } else if (event.type === 'synthesis') {
-                                synthesisContent = event.content || '';
-                                const synthMsg: ChatMessage = {
-                                    id: `synthesis-${Date.now()}`,
+                                addMessage({
                                     role: 'assistant',
-                                    content: synthesisContent,
-                                    agentEmoji: '🏛️',
-                                    agentName: 'Boardroom',
-                                    agentColor: '#6366f1',
+                                    content: event.content as string,
                                     isSynthesis: true,
-                                    timestamp: new Date(),
-                                };
-                                setMessages((prev) => [...prev, synthMsg]);
-                            } else if (event.type === 'onboarding_question' || event.type === 'onboarding_complete') {
-                                const obMsg: ChatMessage = {
-                                    id: `ob-${Date.now()}`,
-                                    role: 'onboarding',
-                                    content: event.content || event.question?.question || '',
-                                    events: [event],
-                                    timestamp: new Date(),
-                                };
-                                setMessages((prev) => [...prev, obMsg]);
+                                });
                             }
                         } catch {
-                            // skip malformed
+                            // ignore parse errors
                         }
                     }
                 }
             } catch (err) {
-                if ((err as Error).name !== 'AbortError') {
-                    console.error('Stream error:', err);
-                }
+                addMessage({ role: 'assistant', content: 'Connection error. Please check your internet and try again.' });
             } finally {
                 setIsStreaming(false);
-                abortRef.current = null;
             }
         },
-        [sessionId, isStreaming, onEvent]
+        [token, isStreaming, sessionId, addMessage, onEvent]
     );
 
     const clearMessages = useCallback(() => {
         setMessages([]);
+        setSessionId(null);
     }, []);
 
     return { messages, sendMessage, isStreaming, clearMessages };

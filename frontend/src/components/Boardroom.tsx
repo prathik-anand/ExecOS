@@ -2,11 +2,11 @@ import { useRef, useEffect, useState, KeyboardEvent } from 'react';
 import { useChat, ChatMessage } from '../hooks/useChat';
 import AgentMessage from './AgentMessage';
 import Sidebar from './Sidebar';
+import { AuthUser } from '../hooks/useAuth';
 
 interface BoardroomProps {
-    sessionId: string;
-    initialContext: Record<string, string>;
-    onResetSession: () => void;
+    user: AuthUser;
+    onLogout: () => void;
 }
 
 const EXAMPLE_QUERIES = [
@@ -16,15 +16,19 @@ const EXAMPLE_QUERIES = [
     "Should I raise a seed round now or wait?",
 ];
 
-export default function Boardroom({ sessionId, initialContext, onResetSession }: BoardroomProps) {
+export default function Boardroom({ user, onLogout }: BoardroomProps) {
     const [inputValue, setInputValue] = useState('');
     const [activeAgents, setActiveAgents] = useState<string[]>([]);
+    const [memoryCount, setMemoryCount] = useState(0);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
 
-    const { messages, sendMessage, isStreaming } = useChat(sessionId, (event) => {
+    const { messages, sendMessage, isStreaming, clearMessages } = useChat((event) => {
         if (event.type === 'routing' && event.agents) {
-            setActiveAgents(event.agents);
+            setActiveAgents(event.agents as string[]);
+        }
+        if (event.type === 'done' && typeof event.memory_count === 'number') {
+            setMemoryCount(event.memory_count);
         }
     });
 
@@ -51,8 +55,7 @@ export default function Boardroom({ sessionId, initialContext, onResetSession }:
         }
     };
 
-    const context = initialContext;
-    const userName = context.name || '';
+    const userName = user.name || '';
     const messageCount = messages.filter((m) => m.role === 'user').length;
 
     const renderMessage = (msg: ChatMessage, i: number) => {
@@ -69,6 +72,58 @@ export default function Boardroom({ sessionId, initialContext, onResetSession }:
                         }}
                     >
                         {msg.content}
+                    </div>
+                </div>
+            );
+        }
+
+        if (msg.role === 'orchestration') {
+            const intentEmoji: Record<string, string> = {
+                decision: '⚖️', analysis: '📊', planning: '🗺️', brainstorm: '💡', 'check-in': '📋',
+            };
+            const complexityColor: Record<string, string> = {
+                simple: '#10b981', compound: '#f59e0b', complex: '#6366f1',
+            };
+            return (
+                <div key={msg.id} className="mb-3 animate-fade-in-up">
+                    <div
+                        className="rounded-xl px-4 py-3"
+                        style={{
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border-active)',
+                            fontSize: '12px',
+                        }}
+                    >
+                        {/* Header row */}
+                        <div className="flex items-center gap-3 flex-wrap mb-2">
+                            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                                🧠 Boardroom Analysis
+                            </span>
+                            {msg.intent && (
+                                <span className="px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--border-active)' }}>
+                                    {intentEmoji[msg.intent] || '🎯'} {msg.intent}
+                                </span>
+                            )}
+                            {msg.complexity && (
+                                <span className="px-2 py-0.5 rounded-full" style={{ background: `${complexityColor[msg.complexity]}15`, color: complexityColor[msg.complexity] || '#888', border: `1px solid ${complexityColor[msg.complexity] || '#888'}44` }}>
+                                    {msg.complexity}
+                                </span>
+                            )}
+                        </div>
+                        {/* Sub-query pills */}
+                        {msg.sub_queries && msg.sub_queries.length > 1 && (
+                            <div className="flex flex-wrap gap-1.5 mb-1.5">
+                                {msg.sub_queries.map((sq) => (
+                                    <span key={sq.id} className="px-2 py-0.5 rounded-md" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                                        🔍 {sq.focus}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        {/* Reasoning */}
+                        {msg.reasoning && (
+                            <p style={{ color: 'var(--text-muted)', marginTop: '4px' }}>{msg.reasoning}</p>
+                        )}
                     </div>
                 </div>
             );
@@ -100,10 +155,12 @@ export default function Boardroom({ sessionId, initialContext, onResetSession }:
         <div className="h-full flex" style={{ background: 'var(--bg-base)' }}>
             {/* Sidebar */}
             <Sidebar
-                context={context}
+                user={user}
                 activeAgents={activeAgents}
                 messageCount={messageCount}
-                onClearSession={onResetSession}
+                memoryCount={memoryCount}
+                onClearSession={() => { clearMessages(); setActiveAgents([]); }}
+                onLogout={onLogout}
             />
 
             {/* Main area */}
@@ -118,7 +175,7 @@ export default function Boardroom({ sessionId, initialContext, onResetSession }:
                             The Boardroom
                         </h1>
                         <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                            {userName ? `Welcome back, ${userName}` : '10 CXO agents ready'}
+                            {userName ? `Welcome back, ${userName}` : '14 CXO agents ready'}
                             {' · '}
                             {isStreaming ? (
                                 <span style={{ color: 'var(--accent)' }}>Agents thinking...</span>
@@ -208,14 +265,14 @@ export default function Boardroom({ sessionId, initialContext, onResetSession }:
                     <div className="max-w-3xl mx-auto">
                         {/* Context chips */}
                         <div className="flex gap-2 mb-2 flex-wrap">
-                            {context.company_stage && (
+                            {user.company_stage && (
                                 <span className="text-xs px-3 py-1 rounded-full" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                                    {context.company_stage}
+                                    {user.company_stage}
                                 </span>
                             )}
-                            {context.industry && (
+                            {user.industry && (
                                 <span className="text-xs px-3 py-1 rounded-full" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                                    {context.industry}
+                                    {user.industry}
                                 </span>
                             )}
                             <span className="text-xs px-3 py-1 rounded-full" style={{ background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>

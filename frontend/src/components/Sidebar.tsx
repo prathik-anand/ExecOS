@@ -1,8 +1,12 @@
+import { AuthUser } from '../hooks/useAuth';
+
 interface SidebarProps {
-    context: Record<string, string>;
+    user: AuthUser;
     activeAgents: string[];
     messageCount: number;
+    memoryCount: number;
     onClearSession: () => void;
+    onLogout: () => void;
 }
 
 const AGENT_INFO: Record<string, { emoji: string; color: string; name: string }> = {
@@ -22,7 +26,7 @@ const AGENT_INFO: Record<string, { emoji: string; color: string; name: string }>
     CArch: { emoji: '🏗️', color: '#d97706', name: 'Chief Architect' },
 };
 
-export default function Sidebar({ context, activeAgents, messageCount, onClearSession }: SidebarProps) {
+export default function Sidebar({ user, activeAgents, messageCount, memoryCount, onClearSession, onLogout }: SidebarProps) {
     const allAgentKeys = Object.keys(AGENT_INFO);
 
     return (
@@ -46,35 +50,32 @@ export default function Sidebar({ context, activeAgents, messageCount, onClearSe
                 </div>
             </div>
 
-            {/* Context profile */}
-            {Object.keys(context).length > 0 && (
-                <div className="px-4 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                    <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
-                        Your Profile
-                    </div>
-                    <div className="space-y-1.5">
-                        {context.name && (
-                            <div>
-                                <div style={{ color: 'var(--text-primary)', fontSize: '14px', fontWeight: '500' }}>{context.name}</div>
-                            </div>
-                        )}
-                        {context.role && (
-                            <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{context.role}</div>
-                        )}
-                        {context.company_name && (
-                            <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{context.company_name}</div>
-                        )}
-                        {context.company_stage && (
-                            <div
-                                className="inline-block mt-1 px-2 py-0.5 rounded text-xs"
-                                style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--border-active)' }}
-                            >
-                                {context.company_stage}
-                            </div>
-                        )}
-                    </div>
+            {/* User profile */}
+            <div className="px-4 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+                <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
+                    Your Profile
                 </div>
-            )}
+                <div className="space-y-1">
+                    {user.name && <div style={{ color: 'var(--text-primary)', fontSize: '14px', fontWeight: '500' }}>{user.name}</div>}
+                    {user.role && <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{user.role}</div>}
+                    {user.company_name && <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{user.company_name}</div>}
+                    {user.company_stage && (
+                        <div
+                            className="inline-block mt-1 px-2 py-0.5 rounded text-xs"
+                            style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--border-active)' }}
+                        >
+                            {user.company_stage}
+                        </div>
+                    )}
+                </div>
+                {/* Memory indicator */}
+                {memoryCount > 0 && (
+                    <div className="flex items-center gap-1.5 mt-3" style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+                        <span>🧠</span>
+                        <span>{memoryCount} memories stored</span>
+                    </div>
+                )}
+            </div>
 
             {/* Cloud C-Suite */}
             <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -115,7 +116,7 @@ export default function Sidebar({ context, activeAgents, messageCount, onClearSe
                 </div>
             </div>
 
-            {/* Footer stats */}
+            {/* Footer */}
             <div className="px-4 py-4" style={{ borderTop: '1px solid var(--border)' }}>
                 <div className="flex items-center justify-between mb-3">
                     <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
@@ -128,6 +129,26 @@ export default function Sidebar({ context, activeAgents, messageCount, onClearSe
                 </div>
                 <button
                     onClick={onClearSession}
+                    className="w-full text-xs py-2 rounded-lg transition-colors mb-2"
+                    style={{
+                        background: 'transparent',
+                        border: '1px solid var(--border)',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)';
+                        (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)';
+                    }}
+                    onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
+                        (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)';
+                    }}
+                >
+                    New Session
+                </button>
+                <button
+                    onClick={onLogout}
                     className="w-full text-xs py-2 rounded-lg transition-colors"
                     style={{
                         background: 'transparent',
@@ -144,7 +165,7 @@ export default function Sidebar({ context, activeAgents, messageCount, onClearSe
                         (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)';
                     }}
                 >
-                    New Session
+                    Sign Out
                 </button>
             </div>
         </div>

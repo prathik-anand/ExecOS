@@ -26,7 +26,7 @@ function renderMarkdown(text: string): string {
 export default function AgentMessageComponent({ message }: AgentMessageProps) {
     const [expanded, setExpanded] = useState(true);
 
-    const isBoardroom = message.isSynthesis || message.agentName === 'Boardroom';
+    const isBoardroom = message.isSynthesis || message.agent_name === 'Boardroom';
 
     return (
         <div className="animate-fade-in-up mb-4">
@@ -35,17 +35,17 @@ export default function AgentMessageComponent({ message }: AgentMessageProps) {
                 <div
                     className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold"
                     style={{
-                        background: message.agentColor ? `${message.agentColor}22` : 'var(--bg-elevated)',
-                        border: `1px solid ${message.agentColor ? message.agentColor + '44' : 'var(--border)'}`,
+                        background: message.agent_color ? `${message.agent_color}22` : 'var(--bg-elevated)',
+                        border: `1px solid ${message.agent_color ? message.agent_color + '44' : 'var(--border)'}`,
                     }}
                 >
-                    {message.agentEmoji || '🤖'}
+                    {message.agent_emoji || '🤖'}
                 </div>
                 <span
                     className="text-xs font-semibold uppercase tracking-widest"
-                    style={{ color: message.agentColor || 'var(--text-secondary)' }}
+                    style={{ color: message.agent_color || 'var(--text-secondary)' }}
                 >
-                    {message.agentName || message.agentKey || 'Agent'}
+                    {message.agent_name || message.agent || 'Agent'}
                 </span>
                 {message.isSynthesis && (
                     <span
@@ -72,7 +72,7 @@ export default function AgentMessageComponent({ message }: AgentMessageProps) {
                         background: isBoardroom ? 'var(--bg-elevated)' : 'var(--bg-card)',
                         border: isBoardroom
                             ? '1px solid var(--border-active)'
-                            : `1px solid ${message.agentColor ? message.agentColor + '22' : 'var(--border)'}`,
+                            : `1px solid ${message.agent_color ? message.agent_color + '22' : 'var(--border)'}`,
                         fontSize: '14px',
                         lineHeight: '1.65',
                         color: 'var(--text-primary)',

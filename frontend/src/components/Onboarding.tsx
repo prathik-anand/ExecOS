@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import { SSEEvent } from '../hooks/useChat';
 
 interface OnboardingProps {
     sessionId: string;
@@ -93,11 +92,11 @@ export default function Onboarding({ sessionId, onComplete }: OnboardingProps) {
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
                     try {
-                        const event: SSEEvent = JSON.parse(line.slice(6));
+                        const event: Record<string, unknown> = JSON.parse(line.slice(6));
                         if (event.type === 'onboarding_question' && event.question) {
-                            setCurrentQuestion(event.question);
-                            setStep(event.step || 0);
-                            setTotal(event.total || 8);
+                            setCurrentQuestion(event.question as Question);
+                            setStep((event.step as number) || 0);
+                            setTotal((event.total as number) || 8);
                         } else if (event.type === 'onboarding_complete') {
                             onComplete(context);
                             return;

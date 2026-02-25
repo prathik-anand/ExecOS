@@ -1,26 +1,27 @@
 """
-GET /api/session — return current session details.
+GET /api/session — returns current user's profile + memory count.
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends
+from app.auth.dependencies import get_current_user
+from app.db.models import User
+from app.memory.service import memory_count
 
-router = APIRouter()
+router = APIRouter(prefix="/api", tags=["session"])
 
 
 @router.get("/session")
-async def get_session(request: Request):
-    session = request.state.session
-    if session is None:
-        return {"error": "Missing X-Session-ID header"}
-
+async def get_session(current_user: User = Depends(get_current_user)):
     return {
-        "id": session.id,
-        "onboarding_complete": session.onboarding_complete,
-        "onboarding_step": session.onboarding_step,
-        "context": session.context or {},
-        "conversation_count": len(session.conversation_history or []),
-        "created_at": session.created_at.isoformat() if session.created_at else None,
-        "last_active_at": session.last_active_at.isoformat()
-        if session.last_active_at
-        else None,
+        "user_id": str(current_user.id),
+        "email": current_user.email,
+        "name": current_user.name,
+        "role": current_user.role,
+        "company_name": current_user.company_name,
+        "company_stage": current_user.company_stage,
+        "industry": current_user.industry,
+        "team_size": current_user.team_size,
+        "goals": current_user.goals,
+        "onboarding_complete": current_user.onboarding_complete,
+        "memory_count": memory_count(str(current_user.id)),
     }

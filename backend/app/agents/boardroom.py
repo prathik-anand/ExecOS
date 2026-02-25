@@ -1,53 +1,61 @@
 """
-Boardroom orchestrator using CrewAI framework with Google Gemini.
+Boardroom orchestrator using CrewAI + Gemini with Mem0 persistent memory.
 
-Flow:
-1. Receive user message + session context
-2. Classify intent → select which CXO agents to invoke
-3. Build CrewAI Agents and Tasks dynamically
-4. Run Crew (in thread executor, since crewai is synchronous)
-5. Yield SSE events: routing, agent_response, synthesis, done
+Gold-standard flow:
+  1. Fetch Mem0 memories for context
+  2. Call orchestrator LLM → intent / decompose / rewrite / route
+  3. Yield "orchestration" SSE event (intent, complexity, sub-queries)
+  4. Run each sub-query's agents in parallel via asyncio.gather
+  5. Yield individual agent_response events
+  6. Synthesise all results into one Boardroom briefing
+  7. Store memory, yield "done"
 """
 
 import asyncio
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncGenerator
 
 from crewai import Agent, Task, Crew, Process, LLM
-from app.agents.prompts import AGENTS, AGENT_KEYS
 
-_executor = ThreadPoolExecutor(max_workers=4)
+from app.agents.prompts import AGENTS
+from app.agents.orchestrator import orchestrate_sync, OrchestratorPlan, SubQuery
+from app.memory.service import search_memory, add_memory
+
+logger = logging.getLogger(__name__)
+_executor = ThreadPoolExecutor(max_workers=8)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 def _get_llm() -> LLM:
-    """Return a configured Gemini LLM. Model is configurable via LLM_MODEL env var."""
     model = os.getenv("LLM_MODEL", "gemini/gemini-2.0-flash")
     api_key = os.getenv("GOOGLE_API_KEY")
     return LLM(model=model, api_key=api_key)
 
 
-def build_user_context_string(context: dict) -> str:
-    if not context:
-        return "No user context available yet."
-    parts = []
-    if context.get("name"):
-        parts.append(f"Name: {context['name']}")
-    if context.get("role"):
-        parts.append(f"Role: {context['role']}")
-    if context.get("company_name"):
-        parts.append(f"Company: {context['company_name']}")
-    if context.get("company_stage"):
-        parts.append(f"Stage: {context['company_stage']}")
-    if context.get("industry"):
-        parts.append(f"Industry: {context['industry']}")
-    if context.get("team_size"):
-        parts.append(f"Team size: {context['team_size']}")
-    if context.get("current_challenges"):
-        parts.append(f"Challenges: {context['current_challenges']}")
-    if context.get("goals"):
-        parts.append(f"90-day goal: {context['goals']}")
-    return "\n".join(parts) if parts else "No user context available yet."
+def build_user_context_string(user) -> str:
+    if user is None:
+        return "No user context available."
+    if hasattr(user, "__dict__"):
+        ctx = {
+            "Name": getattr(user, "name", None),
+            "Role": getattr(user, "role", None),
+            "Company": getattr(user, "company_name", None),
+            "Stage": getattr(user, "company_stage", None),
+            "Industry": getattr(user, "industry", None),
+            "Team size": getattr(user, "team_size", None),
+            "Challenges": getattr(user, "current_challenges", None),
+            "90-day goal": getattr(user, "goals", None),
+        }
+    else:
+        ctx = user
+    parts = [f"{k}: {v}" for k, v in ctx.items() if v]
+    return "\n".join(parts) if parts else "No user context available."
 
 
 def build_history_string(conversation_history: list) -> str:
@@ -59,56 +67,42 @@ def build_history_string(conversation_history: list) -> str:
     )
 
 
-def _classify_by_keyword(message: str) -> list[str]:
-    """Fast keyword-based agent selection. Returns up to 3 matches."""
-    msg_lower = message.lower()
-    upper_msg = message.upper()
-
-    # Explicit @mention
-    explicit = [k for k in AGENT_KEYS if f"@{k}" in upper_msg]
-    if explicit:
-        return explicit[:3]
-
-    # Keyword match
-    matches = []
-    for key, agent in AGENTS.items():
-        if any(kw.lower() in msg_lower for kw in agent["trigger_keywords"]):
-            matches.append(key)
-        if len(matches) >= 3:
-            break
-    return matches or ["CEO"]
+# ---------------------------------------------------------------------------
+# Agent execution — run ONE sub-query through its assigned agents
+# ---------------------------------------------------------------------------
 
 
-def _run_crew_sync(
-    selected_agent_keys: list[str],
-    message: str,
-    context: dict,
-    conversation_history: list,
+def _run_sub_query_sync(
+    sq: SubQuery,
+    context_str: str,
+    memories_str: str,
+    history_str: str,
 ) -> dict[str, str]:
     """
-    Synchronous function that creates and kicks off a CrewAI Crew.
-    Returns dict of {agent_key: response_text}.
-    Called from a thread executor.
+    Run a single sub-query through its assigned CXO agents.
+    Each agent receives the rewritten (context-enriched) query.
+    Returns {agent_key: response_text}.
     """
     llm = _get_llm()
-    context_str = build_user_context_string(context)
-    history_str = build_history_string(conversation_history)
+    results: dict[str, str] = {}
 
-    user_context_block = f"""USER CONTEXT:
+    user_block = f"""USER PROFILE:
 {context_str}
+
+PERSISTENT MEMORY (past decisions & context):
+{memories_str}
 
 RECENT CONVERSATION:
 {history_str}
 
-USER QUERY:
-{message}"""
+QUERY (enriched & focused):
+{sq.rewritten_query}
 
-    # Build CrewAI Agents
-    crew_agents = []
-    crew_tasks = []
-    agent_map: dict[str, Agent] = {}
+FOCUS AREA: {sq.focus}"""
 
-    for key in selected_agent_keys:
+    for key in sq.agents:
+        if key not in AGENTS:
+            continue
         spec = AGENTS[key]
         agent = Agent(
             role=spec["role"],
@@ -118,135 +112,176 @@ USER QUERY:
             verbose=False,
             allow_delegation=False,
         )
-        crew_agents.append(agent)
-        agent_map[key] = agent
-
-    # Build a Task per agent
-    for key in selected_agent_keys:
-        agent = agent_map[key]
-        spec = AGENTS[key]
         task = Task(
-            description=f"""As the {spec["name"]}, analyze the following and provide your executive perspective:
+            description=f"""As the {spec["name"]}, analyse the following executive query and provide your authoritative perspective.
 
-{user_context_block}
+{user_block}
 
-Focus specifically on aspects within your domain as {spec["role"]}.
-Be direct, specific, and actionable. Use your signature frameworks and mental models.""",
-            expected_output=f"""A structured executive response from the {spec["name"]} including:
-- Situation Assessment
-- Recommendation  
-- Rationale
-- Next Steps (3-5 items)""",
+Stay laser-focused on your domain as {spec["role"]}. Reference the persistent memory to maintain continuity.""",
+            expected_output=f"""Structured executive response from {spec["name"]}:
+- **Situation Assessment**: What you see given the user context
+- **Recommendation**: Your specific, actionable recommendation
+- **Rationale**: 2-3 key reasons why
+- **Next Steps**: 3-5 concrete, prioritized actions""",
             agent=agent,
         )
-        crew_tasks.append(task)
-
-    # Add synthesis task if multiple agents
-    results: dict[str, str] = {}
-
-    if len(selected_agent_keys) == 1:
         crew = Crew(
-            agents=crew_agents,
-            tasks=crew_tasks,
-            process=Process.sequential,
-            verbose=False,
+            agents=[agent], tasks=[task], process=Process.sequential, verbose=False
         )
         result = crew.kickoff()
-        results[selected_agent_keys[0]] = str(result.raw)
-    else:
-        # Run agents sequentially, collecting per-agent outputs
-        for key, agent, task in zip(selected_agent_keys, crew_agents, crew_tasks):
-            single_crew = Crew(
-                agents=[agent],
-                tasks=[task],
-                process=Process.sequential,
-                verbose=False,
-            )
-            single_result = single_crew.kickoff()
-            results[key] = str(single_result.raw)
+        results[key] = str(result.raw)
 
     return results
 
 
+# ---------------------------------------------------------------------------
+# Synthesis
+# ---------------------------------------------------------------------------
+
+
 def _synthesize_sync(
-    message: str,
-    context: dict,
-    agent_responses: dict[str, str],
+    original_message: str,
+    plan: OrchestratorPlan,
+    context_str: str,
+    all_responses: dict[str, str],
 ) -> str:
-    """Synthesize multiple agent responses into a unified executive briefing."""
-    if len(agent_responses) == 1:
-        return list(agent_responses.values())[0]
+    """Weave all agent responses into one Boardroom Executive Briefing."""
+    if len(all_responses) == 1:
+        return list(all_responses.values())[0]
 
     llm = _get_llm()
-    context_str = build_user_context_string(context)
     responses_text = "\n\n".join(
         f"=== {AGENTS[k]['emoji']} {AGENTS[k]['name']} ===\n{v}"
-        for k, v in agent_responses.items()
+        for k, v in all_responses.items()
+        if k in AGENTS
+    )
+
+    intent_context = f"Intent: {plan.intent} | Complexity: {plan.complexity} | Strategy: {plan.response_strategy}"
+    sub_query_summary = "\n".join(
+        f"• {sq.focus}: answered by {', '.join(sq.agents)}" for sq in plan.sub_queries
     )
 
     boardroom_agent = Agent(
         role="Boardroom Orchestrator",
-        goal="Synthesize diverse CXO perspectives into a single, coherent executive briefing",
-        backstory="""You are the Boardroom — the master orchestrator of ExecOS.
-You receive inputs from multiple CXO agents and synthesize them into one clear executive briefing.
-Rules: Start with the most urgent insight. Surface tensions/trade-offs explicitly.
-Give ONE clear recommendation. End with 3-5 prioritized next steps. Use markdown headers.""",
+        goal="Synthesise multiple CXO perspectives into one unified, actionable executive briefing",
+        backstory="""You are the ExecOS Boardroom — the final synthesiser.
+You receive specialist perspectives from multiple CXOs and weave them into one cohesive response.
+Lead with the single most critical insight. Surface tensions and trade-offs between CXO views honestly.
+Give ONE clear recommendation with clear ownership. Close with 5 prioritized Next Steps.
+Be executive-level concise — every sentence must earn its place.""",
         llm=llm,
         verbose=False,
         allow_delegation=False,
     )
+    task = Task(
+        description=f"""Synthesise for: "{original_message}"
 
-    synthesis_task = Task(
-        description=f"""Synthesize these CXO perspectives into a unified Boardroom executive briefing.
+{intent_context}
+Sub-queries addressed:
+{sub_query_summary}
 
-User query: "{message}"
+User context: {context_str}
 
-User context:
-{context_str}
-
-Agent perspectives:
-{responses_text}
-
-Create a single, coherent executive briefing that integrates all perspectives.""",
-        expected_output="""A unified executive briefing with:
-- Opening with the most critical insight
-- Key recommendations (with trade-offs if agents disagree)
-- 3-5 prioritized Next Steps""",
+CXO perspectives:
+{responses_text}""",
+        expected_output="""Unified Boardroom Executive Briefing:
+- **Executive Summary** (3 sentences max)
+- **Key Insights** (from CXO perspectives, including tensions/trade-offs)
+- **The Recommendation** (one clear decision path)
+- **Next Steps** (5 items, prioritized, with ownership hints)""",
         agent=boardroom_agent,
     )
-
     crew = Crew(
         agents=[boardroom_agent],
-        tasks=[synthesis_task],
+        tasks=[task],
         process=Process.sequential,
         verbose=False,
     )
-    result = crew.kickoff()
-    return str(result.raw)
+    return str(crew.kickoff().raw)
+
+
+def _store_memory_sync(
+    user_id: str, message: str, response_summary: str, agents_used: list[str]
+):
+    memory_content = (
+        f"User asked: {message}\n"
+        f"Agents: {', '.join(agents_used)}\n"
+        f"Key advice: {response_summary[:600]}"
+    )
+    add_memory(user_id, memory_content, metadata={"agents": agents_used})
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
 
 
 async def run_boardroom(
     message: str,
-    context: dict,
+    user,
     conversation_history: list,
 ) -> AsyncGenerator[dict, None]:
-    """
-    Async generator that yields SSE-ready event dicts.
-    Runs CrewAI in a thread executor to keep FastAPI non-blocking.
-    """
     loop = asyncio.get_event_loop()
+    user_id = str(user.id) if hasattr(user, "id") else str(user)
+    context_str = build_user_context_string(user)
+    history_str = build_history_string(conversation_history)
 
-    # Step 1: Route
-    selected_agents = _classify_by_keyword(message)
-    agent_names = [f"{AGENTS[k]['emoji']} {AGENTS[k]['name']}" for k in selected_agents]
+    # ── 1. Fetch memories ────────────────────────────────────────────────────
+    memories: list[str] = await loop.run_in_executor(
+        _executor, search_memory, user_id, message
+    )
+    memories_str = (
+        "\n".join(f"- {m}" for m in memories)
+        if memories
+        else "No relevant memories yet."
+    )
+
+    # ── 2. Orchestrate (intent → decompose → rewrite → route) ────────────────
+    plan: OrchestratorPlan = await loop.run_in_executor(
+        _executor,
+        orchestrate_sync,
+        message,
+        context_str,
+        memories_str,
+        history_str,
+    )
+
+    # ── 3. Emit orchestration event (shows intent + decomposition in UI) ──────
+    all_agents: list[str] = []
+    for sq in plan.sub_queries:
+        all_agents.extend(sq.agents)
+    unique_agents = list(dict.fromkeys(all_agents))  # preserve order, deduplicate
+
+    yield {
+        "type": "orchestration",
+        "intent": plan.intent,
+        "complexity": plan.complexity,
+        "response_strategy": plan.response_strategy,
+        "reasoning": plan.reasoning,
+        "sub_queries": [
+            {"id": sq.id, "focus": sq.focus, "agents": sq.agents}
+            for sq in plan.sub_queries
+        ],
+        "agents": unique_agents,
+        "content": _build_routing_summary(plan),
+    }
+
+    # Also emit the legacy routing event so Sidebar still lights up correctly
+    agent_names = [
+        f"{AGENTS[k]['emoji']} {AGENTS[k]['name']}"
+        for k in unique_agents
+        if k in AGENTS
+    ]
     yield {
         "type": "routing",
         "content": f"Routing to: {', '.join(agent_names)}",
-        "agents": selected_agents,
+        "agents": unique_agents,
     }
 
-    # Step 2: Announce agents working
-    for key in selected_agents:
+    # Announce thinking for each unique agent
+    for key in unique_agents:
+        if key not in AGENTS:
+            continue
         spec = AGENTS[key]
         yield {
             "type": "agent_reasoning",
@@ -254,26 +289,45 @@ async def run_boardroom(
             "agent_name": spec["name"],
             "agent_emoji": spec["emoji"],
             "agent_color": spec["color"],
-            "content": f"{spec['name']} is analyzing your request...",
+            "content": f"{spec['name']} is analysing your request...",
         }
 
-    # Step 3: Run CrewAI in thread executor
-    try:
-        agent_responses: dict[str, str] = await loop.run_in_executor(
+    # ── 4. Run sub-queries in parallel ───────────────────────────────────────
+    async def run_sub_query(sq: SubQuery) -> dict[str, str]:
+        return await loop.run_in_executor(
             _executor,
-            _run_crew_sync,
-            selected_agents,
-            message,
-            context,
-            conversation_history,
+            _run_sub_query_sync,
+            sq,
+            context_str,
+            memories_str,
+            history_str,
+        )
+
+    try:
+        sub_results: list[dict[str, str]] = await asyncio.gather(
+            *[run_sub_query(sq) for sq in plan.sub_queries],
+            return_exceptions=False,
         )
     except Exception as e:
+        logger.error("Agent execution error: %s", e)
         yield {"type": "error", "content": f"Agent error: {str(e)}"}
         yield {"type": "done", "content": ""}
         return
 
-    # Step 4: Emit individual agent responses
-    for key, response_text in agent_responses.items():
+    # Merge all sub-query results into one flat dict (agent_key → response)
+    all_responses: dict[str, str] = {}
+    for sub_resp in sub_results:
+        for agent_key, text in sub_resp.items():
+            if agent_key not in all_responses:
+                all_responses[agent_key] = text
+            else:
+                # Agent appeared in multiple sub-queries — append both perspectives
+                all_responses[agent_key] += f"\n\n---\n\n{text}"
+
+    # ── 5. Emit individual agent responses ───────────────────────────────────
+    for key, response_text in all_responses.items():
+        if key not in AGENTS:
+            continue
         spec = AGENTS[key]
         yield {
             "type": "agent_response",
@@ -284,22 +338,68 @@ async def run_boardroom(
             "content": response_text,
         }
 
-    # Step 5: Synthesize if multiple agents
-    if len(agent_responses) > 1:
+    # ── 6. Synthesise ────────────────────────────────────────────────────────
+    final_response = ""
+    if len(all_responses) > 1 or plan.response_strategy == "synthesis":
         yield {
             "type": "synthesis_start",
-            "content": "Boardroom synthesizing perspectives...",
+            "content": "Boardroom synthesising perspectives...",
         }
         try:
             synthesis = await loop.run_in_executor(
                 _executor,
                 _synthesize_sync,
                 message,
-                context,
-                agent_responses,
+                plan,
+                context_str,
+                all_responses,
             )
+            final_response = synthesis
             yield {"type": "synthesis", "content": synthesis}
-        except Exception:
-            yield {"type": "synthesis", "content": list(agent_responses.values())[0]}
+        except Exception as exc:
+            logger.warning("Synthesis failed: %s", exc)
+            final_response = list(all_responses.values())[0]
+            yield {"type": "synthesis", "content": final_response}
+    else:
+        final_response = list(all_responses.values())[0] if all_responses else ""
 
-    yield {"type": "done", "content": ""}
+    # ── 7. Store memory ───────────────────────────────────────────────────────
+    agents_used = list(all_responses.keys())
+    asyncio.create_task(
+        loop.run_in_executor(
+            _executor,
+            _store_memory_sync,
+            user_id,
+            message,
+            final_response,
+            agents_used,
+        )
+    )
+
+    yield {"type": "done", "content": "", "memory_count": len(memories)}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_routing_summary(plan: OrchestratorPlan) -> str:
+    intent_emoji = {
+        "decision": "⚖️",
+        "analysis": "📊",
+        "planning": "🗺️",
+        "brainstorm": "💡",
+        "check-in": "📋",
+    }.get(plan.intent, "🎯")
+
+    complexity_label = {
+        "simple": "Direct query",
+        "compound": "Compound query",
+        "complex": "Complex query",
+    }.get(plan.complexity, plan.complexity)
+
+    parts = [f"{intent_emoji} {plan.intent.title()} · {complexity_label}"]
+    if len(plan.sub_queries) > 1:
+        parts.append(f"· {len(plan.sub_queries)} sub-queries decomposed")
+    return " ".join(parts)
