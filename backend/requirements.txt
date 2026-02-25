@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+aiosqlite
+crewai[google]
+python-dotenv
+sse-starlette
+pydantic
