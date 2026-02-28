@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, KeyboardEvent } from 'react';
 import { useChat, ChatMessage } from '../hooks/useChat';
+import { useVoice } from '../hooks/useVoice';
 import AgentMessage from './AgentMessage';
 import Sidebar from './Sidebar';
 import { AuthUser } from '../hooks/useAuth';
@@ -39,6 +40,10 @@ export default function Boardroom({ user, onLogout }: BoardroomProps) {
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
+
+    const { voiceState, error: voiceError, toggle: toggleVoice } = useVoice((transcript) => {
+        if (transcript.trim()) sendMessage(transcript);
+    });
 
     const handleSend = () => {
         const text = inputValue.trim();
@@ -282,16 +287,20 @@ export default function Boardroom({ user, onLogout }: BoardroomProps) {
 
                         <div
                             className="flex items-end gap-3 p-3 rounded-xl"
-                            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+                            style={{
+                                background: 'var(--bg-elevated)',
+                                border: `1px solid ${voiceState === 'recording' ? '#ef4444' : 'var(--border)'}`,
+                                transition: 'border-color 0.2s',
+                            }}
                         >
                             <textarea
                                 ref={inputRef}
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder="Ask your Boardroom anything..."
+                                placeholder={voiceState === 'recording' ? 'Listening...' : 'Ask your Boardroom anything...'}
                                 rows={2}
-                                disabled={isStreaming}
+                                disabled={isStreaming || voiceState === 'processing'}
                                 className="flex-1 resize-none bg-transparent outline-none"
                                 style={{
                                     color: 'var(--text-primary)',
@@ -301,6 +310,23 @@ export default function Boardroom({ user, onLogout }: BoardroomProps) {
                                     maxHeight: '120px',
                                 }}
                             />
+                            {/* Mic button */}
+                            <button
+                                onClick={toggleVoice}
+                                disabled={isStreaming}
+                                title={voiceState === 'idle' ? 'Start voice input' : voiceState === 'recording' ? 'Stop recording' : 'Processing...'}
+                                className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-all"
+                                style={{
+                                    background: voiceState === 'recording' ? '#ef4444' : voiceState === 'processing' ? 'var(--bg-card)' : 'var(--bg-card)',
+                                    border: `1px solid ${voiceState === 'recording' ? '#ef4444' : 'var(--border)'}`,
+                                    cursor: isStreaming ? 'default' : 'pointer',
+                                    fontSize: '15px',
+                                    animation: voiceState === 'recording' ? 'pulse 1s infinite' : 'none',
+                                }}
+                            >
+                                {voiceState === 'processing' ? '⏳' : voiceState === 'recording' ? '⏹' : '🎤'}
+                            </button>
+                            {/* Send button */}
                             <button
                                 onClick={handleSend}
                                 disabled={!inputValue.trim() || isStreaming}
@@ -316,8 +342,11 @@ export default function Boardroom({ user, onLogout }: BoardroomProps) {
                                 {isStreaming ? '⏸' : '↑'}
                             </button>
                         </div>
+                        {voiceError && (
+                            <div className="mt-1 text-xs px-2" style={{ color: '#f87171' }}>{voiceError}</div>
+                        )}
                         <div className="text-center mt-2" style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
-                            Press Enter to send · Shift+Enter for new line
+                            Press Enter to send · Shift+Enter for new line · 🎤 for voice
                         </div>
                     </div>
                 </div>

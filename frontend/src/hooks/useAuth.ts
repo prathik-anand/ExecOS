@@ -1,6 +1,6 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 
-const API_BASE = '';
+const API_BASE = '/api/v1';
 
 export interface AuthUser {
     id: string;
@@ -54,7 +54,7 @@ export function useAuthState(): AuthState {
             setIsLoading(false);
             return;
         }
-        fetch(`${API_BASE}/api/auth/me`, {
+        fetch(`${API_BASE}/auth/me`, {
             headers: { Authorization: `Bearer ${existing}` },
         })
             .then((r) => (r.ok ? r.json() : Promise.reject()))
@@ -70,7 +70,7 @@ export function useAuthState(): AuthState {
     }, []);
 
     const login = async (email: string, password: string) => {
-        const res = await fetch(`${API_BASE}/api/auth/login`, {
+        const res = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password }),
@@ -80,13 +80,13 @@ export function useAuthState(): AuthState {
             throw new Error(err.detail || 'Login failed');
         }
         const data = await res.json();
-        localStorage.setItem(TOKEN_KEY, data.token);
-        setToken(data.token);
+        localStorage.setItem(TOKEN_KEY, data.access_token);
+        setToken(data.access_token);
         setUser(data.user);
     };
 
     const signup = async (signupData: SignupData) => {
-        const res = await fetch(`${API_BASE}/api/auth/signup`, {
+        const res = await fetch(`${API_BASE}/auth/signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(signupData),
@@ -96,8 +96,8 @@ export function useAuthState(): AuthState {
             throw new Error(err.detail || 'Signup failed');
         }
         const data = await res.json();
-        localStorage.setItem(TOKEN_KEY, data.token);
-        setToken(data.token);
+        localStorage.setItem(TOKEN_KEY, data.access_token);
+        setToken(data.access_token);
         setUser(data.user);
     };
 

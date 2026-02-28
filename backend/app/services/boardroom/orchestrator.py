@@ -353,13 +353,13 @@ def orchestrate_sync(
     Runs synchronously; call via loop.run_in_executor in async context.
     """
     try:
-        import google.generativeai as genai  # type: ignore
+        from google import genai  # type: ignore
+        from google.genai import types as genai_types  # type: ignore
 
         api_key = os.getenv("GOOGLE_API_KEY")
-        model_name = os.getenv("LLM_MODEL", "gemini-2.0-flash").replace("gemini/", "")
+        model_name = os.getenv("LLM_MODEL", "gemini/gemini-2.0-flash").replace("gemini/", "")
 
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(model_name)
+        client = genai.Client(api_key=api_key)
 
         agent_list = "\n".join(
             f"  {k}: {AGENTS[k]['name']} ({AGENTS[k]['emoji']})" for k in AGENT_KEYS
@@ -382,10 +382,11 @@ def orchestrate_sync(
             agent_keys=", ".join(AGENT_KEYS),
         )
 
-        response = model.generate_content(
-            f"{system_prompt}\n\n{user_prompt}",
-            generation_config=genai.GenerationConfig(
-                temperature=0.1,  # low temp → deterministic routing
+        response = client.models.generate_content(
+            model=model_name,
+            contents=f"{system_prompt}\n\n{user_prompt}",
+            config=genai_types.GenerateContentConfig(
+                temperature=0.1,
                 max_output_tokens=1024,
             ),
         )

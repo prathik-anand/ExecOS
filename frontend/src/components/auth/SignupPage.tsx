@@ -15,6 +15,31 @@ const inputStyle = {
     fontSize: '14px',
 };
 
+function InputField({ label, field, type = 'text', placeholder, value, onChange }: {
+    label: string;
+    field: keyof SignupData;
+    type?: string;
+    placeholder?: string;
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+    return (
+        <div className="mb-4">
+            <label className="block text-sm mb-1.5" style={{ color: 'var(--text-secondary)' }}>{label}</label>
+            <input
+                type={type}
+                value={value}
+                onChange={onChange}
+                placeholder={placeholder}
+                className="w-full px-4 py-3 rounded-xl outline-none transition-all"
+                style={inputStyle}
+                onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
+                onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
+            />
+        </div>
+    );
+}
+
 export default function SignupPage({ onNavigateLogin }: SignupPageProps) {
     const { signup } = useAuth();
     const [step, setStep] = useState<1 | 2>(1);
@@ -35,6 +60,9 @@ export default function SignupPage({ onNavigateLogin }: SignupPageProps) {
     });
 
     const set = (field: keyof SignupData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+        setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+    const setInput = (field: keyof SignupData) => (e: React.ChangeEvent<HTMLInputElement>) =>
         setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
     const handleNext = (e: FormEvent) => {
@@ -62,22 +90,6 @@ export default function SignupPage({ onNavigateLogin }: SignupPageProps) {
             setLoading(false);
         }
     };
-
-    const InputField = ({ label, field, type = 'text', placeholder }: { label: string; field: keyof SignupData; type?: string; placeholder?: string }) => (
-        <div className="mb-4">
-            <label className="block text-sm mb-1.5" style={{ color: 'var(--text-secondary)' }}>{label}</label>
-            <input
-                type={type}
-                value={form[field] as string}
-                onChange={set(field)}
-                placeholder={placeholder}
-                className="w-full px-4 py-3 rounded-xl outline-none transition-all"
-                style={inputStyle}
-                onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
-            />
-        </div>
-    );
 
     return (
         <div className="min-h-screen flex items-center justify-center py-12" style={{ background: 'var(--bg-base)' }}>
@@ -114,8 +126,8 @@ export default function SignupPage({ onNavigateLogin }: SignupPageProps) {
                 <div className="rounded-2xl p-8" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
                     {step === 1 ? (
                         <form onSubmit={handleNext}>
-                            <InputField label="Email" field="email" type="email" placeholder="you@company.com" />
-                            <InputField label="Password (min 8 chars)" field="password" type="password" placeholder="••••••••" />
+                            <InputField label="Email" field="email" type="email" placeholder="you@company.com" value={form.email} onChange={setInput('email')} />
+                            <InputField label="Password (min 8 chars)" field="password" type="password" placeholder="••••••••" value={form.password} onChange={setInput('password')} />
 
                             {error && (
                                 <div className="mb-4 px-4 py-3 rounded-xl text-sm" style={{ background: '#7f1d1d22', border: '1px solid #7f1d1d', color: '#fca5a5' }}>

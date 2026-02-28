@@ -45,7 +45,7 @@ export function useChat(onEvent?: SSEEventCallback) {
             setIsStreaming(true);
 
             try {
-                const res = await fetch('/api/chat', {
+                const res = await fetch('/api/v1/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

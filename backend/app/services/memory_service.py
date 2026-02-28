@@ -21,11 +21,31 @@ def _get_client():
     try:
         from mem0 import Memory  # type: ignore
 
-        api_key = os.getenv("MEM0_API_KEY")
-        if api_key:
-            _mem0_client = Memory.from_config({"api_key": api_key})
+        mem0_api_key = os.getenv("MEM0_API_KEY")
+        if mem0_api_key:
+            _mem0_client = Memory.from_config({"api_key": mem0_api_key})
         else:
-            _mem0_client = Memory()
+            google_api_key = os.getenv("GOOGLE_API_KEY")
+            llm_model = os.getenv("LLM_MODEL", "gemini/gemini-2.0-flash").replace("gemini/", "")
+            _mem0_client = Memory.from_config({
+                "llm": {
+                    "provider": "gemini",
+                    "config": {
+                        "model": llm_model,
+                        "temperature": 0.2,
+                        "max_tokens": 2000,
+                        "api_key": google_api_key,
+                    },
+                },
+                "embedder": {
+                    "provider": "gemini",
+                    "config": {
+                        "model": "models/gemini-embedding-001",
+                        "embedding_dims": 1536,
+                        "api_key": google_api_key,
+                    },
+                },
+            })
     except Exception as exc:
         logger.warning("Mem0 init failed: %s", exc)
         _mem0_client = None
