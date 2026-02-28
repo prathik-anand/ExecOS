@@ -1,54 +1,54 @@
 """
-ExecOS FastAPI application entry point.
-- JWT-based user authentication (no anonymous sessions)
-- PostgreSQL via asyncpg + SQLAlchemy async
-- Mem0 persistent memory for all users
-- CrewAI + Gemini multi-agent Boardroom
+ExecOS FastAPI Application Entry Point.
+
+Mounts a single router (app/api/router.py) which aggregates all v1 routes.
+DB initialisation runs once on startup via the lifespan manager.
 """
 
 import os
+import logging
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-load_dotenv()
+from app.utils.database import init_db
+from app.api.router import router as api_router
 
-from app.db.database import init_db
-from app.api.auth import router as auth_router
-from app.api.chat import router as chat_router
-from app.api.session import router as session_router
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Startup: initialise DB tables. Shutdown: nothing to clean up."""
+    logger.info("Starting ExecOS backend — initialising database...")
     await init_db()
+    logger.info("Database ready.")
     yield
 
 
-app = FastAPI(title="ExecOS API", version="2.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="ExecOS API",
+    version="2.0.0",
+    description="AI-powered executive boardroom — 5-stage LLM orchestration pipeline",
+    lifespan=lifespan,
+)
 
 # CORS
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=[FRONTEND_URL, "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Routers
-app.include_router(auth_router)
-app.include_router(chat_router)
-app.include_router(session_router)
-
-
-@app.get("/")
-async def root():
-    return {"status": "ok", "app": "ExecOS", "version": "2.0.0"}
+# Mount all API routes under /api/v1
+app.include_router(api_router)
 
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy"}
+    return {"status": "ok", "version": "2.0.0"}

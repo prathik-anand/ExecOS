@@ -1,43 +1,66 @@
-#!/usr/bin/env bash
-# start.sh — start backend + frontend dev servers
-set -e
+#!/bin/bash
 
-echo "🏛️ Starting ExecOS..."
+# Coloring
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-# Backend
-cd backend
-if [ ! -f .env ]; then
-  echo "⚠️  No .env found! Copying from .env.example..."
-  cp .env.example .env
-  echo "👉 Edit backend/.env and add your ANTHROPIC_API_KEY, then re-run."
-  exit 1
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_PORT=8000
+FRONTEND_PORT=5173
+
+# Parse arguments
+BACKEND_ONLY=false
+for arg in "$@"; do
+    [ "$arg" == "--backend-only" ] && BACKEND_ONLY=true
+done
+
+# ── Kill ports ────────────────────────────────────────────────────────────────
+echo -e "${BLUE}[INFO] Cleaning up port $BACKEND_PORT (Backend)...${NC}"
+kill -9 $(lsof -t -i:$BACKEND_PORT) 2>/dev/null || true
+pkill -f "uvicorn main:app" 2>/dev/null || true
+
+if [ "$BACKEND_ONLY" = false ]; then
+    echo -e "${BLUE}[INFO] Cleaning up port $FRONTEND_PORT (Frontend)...${NC}"
+    kill -9 $(lsof -t -i:$FRONTEND_PORT) 2>/dev/null || true
 fi
 
-if [ ! -d venv ]; then
-  echo "📦 Creating Python virtualenv..."
-  python3 -m venv venv
-  source venv/bin/activate
-  pip install -r requirements.txt -q
-else
-  source venv/bin/activate
+# ── Frontend (background) ─────────────────────────────────────────────────────
+if [ "$BACKEND_ONLY" = false ]; then
+    echo -e "${BLUE}[INFO] Starting Frontend (background)...${NC}"
+    cd "$ROOT_DIR/frontend"
+    [ ! -d node_modules ] && npm install -q
+    npm run dev > /dev/null 2>&1 &
+    FRONTEND_PID=$!
+    echo -e "${GREEN}[SUCCESS] Frontend running at http://localhost:$FRONTEND_PORT${NC}"
+    cd "$ROOT_DIR"
 fi
 
-echo "🚀 Starting backend on http://localhost:8000"
-uvicorn main:app --reload --port 8000 &
-BACKEND_PID=$!
+# ── Backend (foreground) ──────────────────────────────────────────────────────
+echo -e "${BLUE}[INFO] Starting Backend...${NC}"
+cd "$ROOT_DIR/backend"
 
-cd ../frontend
-echo "🎨 Starting frontend on http://localhost:5173"
-npm run dev &
-FRONTEND_PID=$!
+uv sync -q
 
+if [ -f ".env" ]; then
+    echo -e "${BLUE}[INFO] Loading .env...${NC}"
+    set -a; source .env; set +a
+fi
+
+export PYTHONPATH=$(pwd)
+
+echo -e "${BLUE}[INFO] Running alembic upgrade head...${NC}"
+uv run alembic upgrade head
+
+# Cleanup on exit
+cleanup() {
+    echo -e "\n${BLUE}[INFO] Stopping services...${NC}"
+    [ "$BACKEND_ONLY" = false ] && kill $FRONTEND_PID 2>/dev/null || true
+}
+trap cleanup EXIT
+
+echo -e "${GREEN}[SUCCESS] Backend running at http://localhost:$BACKEND_PORT${NC}"
+echo -e "${GREEN}          API docs → http://localhost:$BACKEND_PORT/docs${NC}"
 echo ""
-echo "✅ ExecOS running!"
-echo "   Frontend: http://localhost:5173"
-echo "   Backend:  http://localhost:8000"
-echo "   API docs: http://localhost:8000/docs"
-echo ""
-echo "Press Ctrl+C to stop both servers."
 
-trap "kill $BACKEND_PID $FRONTEND_PID" SIGINT SIGTERM
-wait
+uv run uvicorn main:app --host 0.0.0.0 --port $BACKEND_PORT --reload
