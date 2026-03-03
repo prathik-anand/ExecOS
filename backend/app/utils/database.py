@@ -43,6 +43,8 @@ async def init_db() -> None:
     """Create all tables on startup (idempotent — safe to call every time)."""
     # Import here to avoid circular imports; models must be imported before create_all
     from app.models.base import Base
+    import app.models.organization  # noqa: F401
+    import app.models.invitation  # noqa: F401
     import app.models.user  # noqa: F401
     import app.models.session  # noqa: F401
     import app.models.chat_message  # noqa: F401

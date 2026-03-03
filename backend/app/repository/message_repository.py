@@ -7,6 +7,7 @@ Each event type (user, routing, agent, validation, synthesis) maps to one method
 
 import uuid
 from datetime import datetime
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat_message import ChatMessage
@@ -85,6 +86,14 @@ class MessageRepository:
         self, session_id: uuid.UUID, user_id: uuid.UUID, content: str
     ) -> ChatMessage:
         return self._new(session_id, user_id, role="synthesis", content=content)
+
+    async def get_by_session(self, session_id: uuid.UUID) -> list[ChatMessage]:
+        result = await self.db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at)
+        )
+        return list(result.scalars().all())
 
     async def flush(self) -> None:
         """Flush pending inserts to DB within the current transaction."""

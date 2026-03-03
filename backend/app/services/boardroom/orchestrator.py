@@ -277,9 +277,10 @@ Rules:
 - Sub-queries should be focused and atomic — one concern per sub-query
 - rewritten_query MUST embed user profile, relevant memory, and conversation context so the agent has everything it needs
 - Choose agents based on domain expertise — route to 1-2 agents maximum per sub-query
-- For simple queries: 1 sub-query, 1-2 agents, response_strategy = "direct"  
-- For compound queries: 2-3 sub-queries, response_strategy = "multi-perspective"
+- For simple queries: 1 sub-query, 1-2 agents, response_strategy = "synthesis"
+- For compound queries: 2-3 sub-queries, response_strategy = "synthesis"
 - For complex queries: 3+ sub-queries covering strategic angles, response_strategy = "synthesis"
+- response_strategy is ALWAYS "synthesis" — the Boardroom always provides a final unified answer
 - @AGENT explicit mentions override your routing for that part
 - Always include CEO for purely strategic/directional questions
 - Return ONLY valid JSON, no markdown, no explanation outside the JSON"""
@@ -353,13 +354,9 @@ def orchestrate_sync(
     Runs synchronously; call via loop.run_in_executor in async context.
     """
     try:
-        from google import genai  # type: ignore
-        from google.genai import types as genai_types  # type: ignore
+        import litellm  # type: ignore
 
-        api_key = os.getenv("GOOGLE_API_KEY")
-        model_name = os.getenv("LLM_MODEL", "gemini/gemini-2.0-flash").replace("gemini/", "")
-
-        client = genai.Client(api_key=api_key)
+        model = os.getenv("LLM_MODEL", "gemini/gemini-2.0-flash")
 
         agent_list = "\n".join(
             f"  {k}: {AGENTS[k]['name']} ({AGENTS[k]['emoji']})" for k in AGENT_KEYS
@@ -382,16 +379,17 @@ def orchestrate_sync(
             agent_keys=", ".join(AGENT_KEYS),
         )
 
-        response = client.models.generate_content(
-            model=model_name,
-            contents=f"{system_prompt}\n\n{user_prompt}",
-            config=genai_types.GenerateContentConfig(
-                temperature=0.1,
-                max_output_tokens=1024,
-            ),
+        response = litellm.completion(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.1,
+            max_tokens=1024,
         )
 
-        raw = response.text.strip()
+        raw = response.choices[0].message.content.strip()
         # Strip markdown fences if present
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)

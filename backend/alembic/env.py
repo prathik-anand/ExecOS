@@ -8,12 +8,17 @@ DATABASE_URL is read from the .env file via os.getenv.
 import os
 import asyncio
 from logging.config import fileConfig
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 
 # Load all models so autogenerate can detect them
 from app.models.base import Base
+import app.models.organization  # noqa: F401
+import app.models.invitation  # noqa: F401
 import app.models.user  # noqa: F401
 import app.models.session  # noqa: F401
 import app.models.chat_message  # noqa: F401

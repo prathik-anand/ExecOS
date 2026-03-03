@@ -10,17 +10,17 @@ from app.services.boardroom.orchestrator import OrchestratorPlan
 from app.services.boardroom.prompts import AGENTS
 from app.utils.llm import get_llm
 
-_BACKSTORY = """You are the ExecOS Boardroom — the final synthesiser.
-Weave specialist CXO perspectives into one cohesive executive response.
-Lead with the single most critical insight. Surface tensions honestly.
-Give ONE clear recommendation with clear ownership. Be concise — every sentence earns its place."""
+_BACKSTORY = """You are the ExecOS Boardroom — the final voice of the executive team.
+Your job is to distil one or more CXO perspectives into a single, clear executive response.
+Lead with the most critical insight. When multiple perspectives exist, surface trade-offs honestly.
+Give ONE clear recommendation with ownership. Be concise — every sentence earns its place."""
 
 _OUTPUT = (
-    "Unified Boardroom Executive Briefing:\n"
-    "- **Executive Summary** (3 sentences max)\n"
-    "- **Key Insights** (include CXO tensions/trade-offs)\n"
-    "- **The Recommendation** (one clear decision path)\n"
-    "- **Next Steps** (5 items, prioritized)"
+    "Boardroom Final Answer:\n"
+    "- **Executive Summary** (2-3 sentences)\n"
+    "- **Key Insights** (main findings; highlight trade-offs if multiple perspectives)\n"
+    "- **The Recommendation** (one clear decision path with ownership)\n"
+    "- **Next Steps** (3-5 prioritized actions)"
 )
 
 
@@ -30,9 +30,6 @@ def synthesize(
     context_str: str,
     agent_responses: dict[str, str],
 ) -> str:
-    if len(agent_responses) == 1:
-        return list(agent_responses.values())[0]
-
     llm = get_llm()
     perspectives = "\n\n".join(
         f"=== {AGENTS[k]['emoji']} {AGENTS[k]['name']} ===\n{v}"

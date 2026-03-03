@@ -105,9 +105,9 @@ async def run_pipeline(
         if event:
             yield event
 
-    # ── 5b. Synthesis ────────────────────────────────────────────────────────
+    # ── 5b. Synthesis — always runs so the Boardroom always delivers a final answer
     final_response = ""
-    if len(all_responses) > 1 or plan.response_strategy == "synthesis":
+    if all_responses:
         yield synthesis_start_event()
         try:
             result = await loop.run_in_executor(
@@ -119,8 +119,6 @@ async def run_pipeline(
             logger.warning("Synthesis failed: %s", exc)
             final_response = list(all_responses.values())[0]
             yield synthesis_event(final_response)
-    else:
-        final_response = list(all_responses.values())[0] if all_responses else ""
 
     # ── 6. Memory Persistence ─────────────────────────────────────────────────
     loop.run_in_executor(

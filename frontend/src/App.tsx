@@ -3,6 +3,7 @@ import { AuthProvider } from './hooks/AuthProvider';
 import { useAuth } from './hooks/useAuth';
 import LoginPage from './components/auth/LoginPage';
 import SignupPage from './components/auth/SignupPage';
+import OnboardingChat from './components/OnboardingChat';
 import Boardroom from './components/Boardroom';
 
 type AuthView = 'login' | 'signup';
@@ -28,6 +29,11 @@ function AppContent() {
         ) : (
             <SignupPage onNavigateLogin={() => setAuthView('login')} />
         );
+    }
+
+    // Show conversational onboarding until complete
+    if (!user?.onboarding_complete) {
+        return <OnboardingChat />;
     }
 
     return (

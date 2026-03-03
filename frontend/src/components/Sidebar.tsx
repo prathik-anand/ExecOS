@@ -1,33 +1,36 @@
+import { useState } from 'react';
 import { AuthUser } from '../hooks/useAuth';
+import { SessionSummary } from '../hooks/useChat';
+import { AGENT_INFO } from '../constants/agents';
 
 interface SidebarProps {
     user: AuthUser;
     activeAgents: string[];
-    messageCount: number;
+    sessions: SessionSummary[];
+    currentSessionId: string | null;
     memoryCount: number;
-    onClearSession: () => void;
+    onNewSession: () => void;
+    onLoadSession: (id: string) => void;
     onLogout: () => void;
 }
 
-const AGENT_INFO: Record<string, { emoji: string; color: string; name: string }> = {
-    CEO: { emoji: '👑', color: '#6366f1', name: 'Chief Executive Officer' },
-    CFO: { emoji: '💰', color: '#10b981', name: 'Chief Financial Officer' },
-    CTO: { emoji: '⚙️', color: '#3b82f6', name: 'Chief Technology Officer' },
-    CPO: { emoji: '🎯', color: '#f59e0b', name: 'Chief Product Officer' },
-    CMO: { emoji: '📣', color: '#ec4899', name: 'Chief Marketing Officer' },
-    CSO: { emoji: '🤝', color: '#14b8a6', name: 'Chief Sales Officer' },
-    CPeO: { emoji: '🧑‍🤝‍🧑', color: '#8b5cf6', name: 'Chief People Officer' },
-    CCO: { emoji: '❤️', color: '#f97316', name: 'Chief Customer Officer' },
-    CLO: { emoji: '⚖️', color: '#6b7280', name: 'Chief Legal Officer' },
-    COO: { emoji: '🔧', color: '#84cc16', name: 'Chief Operating Officer' },
-    CSci: { emoji: '🔬', color: '#06b6d4', name: 'Chief Scientist' },
-    CIO: { emoji: '🗄️', color: '#a855f7', name: 'Chief Information Officer' },
-    CAIO: { emoji: '🤖', color: '#f43f5e', name: 'Chief AI Officer' },
-    CArch: { emoji: '🏗️', color: '#d97706', name: 'Chief Architect' },
-};
+function formatRelativeTime(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(iso).toLocaleDateString();
+}
 
-export default function Sidebar({ user, activeAgents, messageCount, memoryCount, onClearSession, onLogout }: SidebarProps) {
-    const allAgentKeys = Object.keys(AGENT_INFO);
+export default function Sidebar({
+    user, activeAgents, sessions, currentSessionId, memoryCount,
+    onNewSession, onLoadSession, onLogout,
+}: SidebarProps) {
+    const [view, setView] = useState<'chats' | 'agents'>('chats');
 
     return (
         <div
@@ -39,96 +42,139 @@ export default function Sidebar({ user, activeAgents, messageCount, memoryCount,
                 minWidth: '240px',
             }}
         >
-            {/* Logo */}
-            <div className="px-5 py-5" style={{ borderBottom: '1px solid var(--border)' }}>
-                <div className="flex items-center gap-2.5">
+            {/* Logo + compact user context */}
+            <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-2.5 mb-2">
                     <span className="text-xl">🏛️</span>
                     <div>
                         <div className="font-bold tracking-wide" style={{ color: 'var(--text-primary)', fontSize: '15px' }}>ExecOS</div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Cloud C-Suite</div>
                     </div>
                 </div>
-            </div>
-
-            {/* User profile */}
-            <div className="px-4 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
-                <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
-                    Your Profile
-                </div>
-                <div className="space-y-1">
-                    {user.name && <div style={{ color: 'var(--text-primary)', fontSize: '14px', fontWeight: '500' }}>{user.name}</div>}
-                    {user.role && <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{user.role}</div>}
-                    {user.company_name && <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{user.company_name}</div>}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                    {user.name && (
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{user.name}</span>
+                    )}
                     {user.company_stage && (
-                        <div
-                            className="inline-block mt-1 px-2 py-0.5 rounded text-xs"
+                        <span
+                            className="px-1.5 py-0.5 rounded text-xs"
                             style={{ background: 'var(--accent-glow)', color: 'var(--accent)', border: '1px solid var(--border-active)' }}
                         >
                             {user.company_stage}
-                        </div>
+                        </span>
+                    )}
+                    {memoryCount > 0 && (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>· 🧠 {memoryCount}</span>
                     )}
                 </div>
-                {/* Memory indicator */}
-                {memoryCount > 0 && (
-                    <div className="flex items-center gap-1.5 mt-3" style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
-                        <span>🧠</span>
-                        <span>{memoryCount} memories stored</span>
+            </div>
+
+            {/* Tab toggle: Chats / Agents */}
+            <div className="px-3 pt-3 pb-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                <div
+                    className="flex rounded-lg p-0.5"
+                    style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+                >
+                    {(['chats', 'agents'] as const).map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setView(tab)}
+                            className="flex-1 py-1.5 rounded-md text-xs font-medium transition-all"
+                            style={{
+                                background: view === tab ? 'var(--accent)' : 'transparent',
+                                color: view === tab ? 'white' : 'var(--text-muted)',
+                                border: 'none',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            {tab === 'chats' ? '💬 Chats' : '👔 Agents'}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto px-3 py-2">
+                {view === 'chats' ? (
+                    <div className="space-y-0.5">
+                        {sessions.length === 0 ? (
+                            <div className="text-center py-10" style={{ color: 'var(--text-muted)', fontSize: '12px', lineHeight: '1.6' }}>
+                                No conversations yet.<br />Start by asking the Boardroom anything.
+                            </div>
+                        ) : (
+                            sessions.map((s) => {
+                                const isActive = s.id === currentSessionId;
+                                return (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => onLoadSession(s.id)}
+                                        className="w-full text-left px-3 py-2.5 rounded-lg transition-all"
+                                        style={{
+                                            background: isActive ? 'var(--accent-glow)' : 'transparent',
+                                            border: `1px solid ${isActive ? 'var(--border-active)' : 'transparent'}`,
+                                            cursor: 'pointer',
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-elevated)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                                        }}
+                                    >
+                                        <div
+                                            className="text-xs truncate"
+                                            style={{
+                                                color: isActive ? 'var(--accent)' : 'var(--text-primary)',
+                                                fontWeight: isActive ? 500 : 400,
+                                                lineHeight: '1.4',
+                                            }}
+                                        >
+                                            {s.title}
+                                        </div>
+                                        <div style={{ color: 'var(--text-muted)', fontSize: '10px', marginTop: '2px' }}>
+                                            {formatRelativeTime(s.last_active_at)}
+                                        </div>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                ) : (
+                    <div className="space-y-0.5 pt-1">
+                        <div className="text-xs font-semibold uppercase tracking-widest mb-2 px-1" style={{ color: 'var(--text-muted)' }}>
+                            Cloud C-Suite
+                        </div>
+                        {Object.entries(AGENT_INFO).map(([key, info]) => {
+                            const isActive = activeAgents.includes(key);
+                            return (
+                                <div
+                                    key={key}
+                                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg"
+                                    style={{
+                                        background: isActive ? `${info.color}15` : 'transparent',
+                                        border: isActive ? `1px solid ${info.color}33` : '1px solid transparent',
+                                    }}
+                                >
+                                    <span className="text-base" style={{ lineHeight: 1 }}>{info.emoji}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-semibold" style={{ color: isActive ? info.color : 'var(--text-secondary)' }}>
+                                            {key}
+                                        </div>
+                                    </div>
+                                    {isActive && (
+                                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: info.color }} />
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>
 
-            {/* Cloud C-Suite */}
-            <div className="flex-1 overflow-y-auto px-4 py-4">
-                <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
-                    Cloud C-Suite
-                </div>
-                <div className="space-y-1">
-                    {allAgentKeys.map((key) => {
-                        const info = AGENT_INFO[key];
-                        const isActive = activeAgents.includes(key);
-                        return (
-                            <div
-                                key={key}
-                                className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all"
-                                style={{
-                                    background: isActive ? `${info.color}15` : 'transparent',
-                                    border: isActive ? `1px solid ${info.color}33` : '1px solid transparent',
-                                }}
-                            >
-                                <span className="text-base" style={{ lineHeight: 1 }}>{info.emoji}</span>
-                                <div className="flex-1 min-w-0">
-                                    <div
-                                        className="text-xs font-semibold"
-                                        style={{ color: isActive ? info.color : 'var(--text-secondary)' }}
-                                    >
-                                        {key}
-                                    </div>
-                                </div>
-                                {isActive && (
-                                    <div
-                                        className="w-1.5 h-1.5 rounded-full"
-                                        style={{ background: info.color }}
-                                    />
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
             {/* Footer */}
             <div className="px-4 py-4" style={{ borderTop: '1px solid var(--border)' }}>
-                <div className="flex items-center justify-between mb-3">
-                    <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                        {messageCount} exchanges
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#10b981' }} />
-                        <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Online</span>
-                    </div>
-                </div>
                 <button
-                    onClick={onClearSession}
+                    onClick={onNewSession}
                     className="w-full text-xs py-2 rounded-lg transition-colors mb-2"
                     style={{
                         background: 'transparent',
@@ -145,7 +191,7 @@ export default function Sidebar({ user, activeAgents, messageCount, memoryCount,
                         (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)';
                     }}
                 >
-                    New Session
+                    + New Session
                 </button>
                 <button
                     onClick={onLogout}

@@ -9,14 +9,6 @@ from pydantic import BaseModel, EmailStr, Field
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
-    name: str | None = None
-    role: str | None = None
-    company_name: str | None = None
-    company_stage: str | None = None
-    industry: str | None = None
-    team_size: str | None = None
-    current_challenges: str | None = None
-    goals: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -41,6 +33,8 @@ class UserProfileResponse(BaseModel):
     team_size: str | None
     current_challenges: str | None
     goals: str | None
+    org_id: uuid.UUID | None
+    org_role: str | None
     onboarding_complete: bool
     created_at: datetime
 

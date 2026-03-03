@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from './useAuth';
+import { AGENT_INFO } from '../constants/agents';
 
 export interface SubQueryInfo {
     id: string;
@@ -23,6 +24,14 @@ export interface ChatMessage {
     reasoning?: string;
 }
 
+export interface SessionSummary {
+    id: string;
+    title: string;
+    created_at: string;
+    last_active_at: string;
+}
+
+
 type SSEEventCallback = (event: Record<string, unknown>) => void;
 
 export function useChat(onEvent?: SSEEventCallback) {
@@ -30,12 +39,64 @@ export function useChat(onEvent?: SSEEventCallback) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
     const [sessionId, setSessionId] = useState<string | null>(null);
+    const [sessions, setSessions] = useState<SessionSummary[]>([]);
 
     const addMessage = useCallback((msg: Omit<ChatMessage, 'id'>) => {
         const id = crypto.randomUUID();
         setMessages((prev) => [...prev, { ...msg, id }]);
         return id;
     }, []);
+
+    const fetchSessions = useCallback(async () => {
+        if (!token) return;
+        try {
+            const res = await fetch('/api/v1/session/history', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setSessions(data.sessions || []);
+            }
+        } catch { /* ignore */ }
+    }, [token]);
+
+    const loadSession = useCallback(async (sid: string) => {
+        if (!token) return;
+        try {
+            const res = await fetch(`/api/v1/session/${sid}/messages`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            const loaded: ChatMessage[] = (data.messages || []).map((m: Record<string, unknown>) => {
+                const msg: ChatMessage = {
+                    id: m.id as string,
+                    role: m.role as ChatMessage['role'],
+                    content: m.content as string,
+                };
+                if (m.agent) {
+                    const key = m.agent as string;
+                    const meta = AGENT_INFO[key];
+                    msg.agent = key;
+                    msg.agent_name = (m.agent_name as string) || meta?.name;
+                    msg.agent_emoji = meta?.emoji;
+                    msg.agent_color = meta?.color;
+                }
+                if (m.isSynthesis) msg.isSynthesis = true;
+                if (m.intent)      msg.intent = m.intent as string;
+                if (m.complexity)  msg.complexity = m.complexity as string;
+                if (m.sub_queries) msg.sub_queries = m.sub_queries as SubQueryInfo[];
+                if (m.reasoning)   msg.reasoning = m.reasoning as string;
+                return msg;
+            });
+            setMessages(loaded);
+            setSessionId(sid);
+        } catch { /* ignore */ }
+    }, [token]);
+
+    useEffect(() => {
+        fetchSessions();
+    }, [fetchSessions]);
 
     const sendMessage = useCallback(
         async (text: string) => {
@@ -54,7 +115,6 @@ export function useChat(onEvent?: SSEEventCallback) {
                     body: JSON.stringify({ message: text, session_id: sessionId }),
                 });
 
-                // Capture session ID from response header
                 const newSessionId = res.headers.get('X-Session-ID');
                 if (newSessionId) setSessionId(newSessionId);
 
@@ -108,18 +168,17 @@ export function useChat(onEvent?: SSEEventCallback) {
                                     isSynthesis: true,
                                 });
                             }
-                        } catch {
-                            // ignore parse errors
-                        }
+                        } catch { /* ignore parse errors */ }
                     }
                 }
-            } catch (err) {
+            } catch {
                 addMessage({ role: 'assistant', content: 'Connection error. Please check your internet and try again.' });
             } finally {
                 setIsStreaming(false);
+                fetchSessions(); // refresh sidebar list after each exchange
             }
         },
-        [token, isStreaming, sessionId, addMessage, onEvent]
+        [token, isStreaming, sessionId, addMessage, onEvent, fetchSessions]
     );
 
     const clearMessages = useCallback(() => {
@@ -127,5 +186,5 @@ export function useChat(onEvent?: SSEEventCallback) {
         setSessionId(null);
     }, []);
 
-    return { messages, sendMessage, isStreaming, clearMessages };
+    return { messages, sendMessage, isStreaming, clearMessages, sessions, fetchSessions, loadSession, sessionId };
 }

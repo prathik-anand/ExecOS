@@ -1,13 +1,15 @@
 """
-Auth API controller — thin HTTP handler only.
-All business logic delegated to services and repository layers.
+Auth API controller — signup (email+password only), login, profile.
+Org auto-created for business email domains on signup.
 """
 
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.database import get_db
 from app.utils.security import get_current_user
+from app.utils.email_utils import is_business_email, get_email_domain, domain_to_org_name
 from app.schemas.auth_schemas import (
     SignupRequest,
     LoginRequest,
@@ -16,6 +18,7 @@ from app.schemas.auth_schemas import (
     UpdateProfileRequest,
 )
 from app.repository.user_repository import UserRepository
+from app.repository.org_repository import OrgRepository
 from app.services.auth_service import hash_password, verify_password, create_token
 from app.models.user import User
 
@@ -29,18 +32,26 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
     repo = UserRepository(db)
     if await repo.get_by_email(body.email):
         raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Auto-create (or join) org for business email domains
+    org_id = None
+    org_role = None
+    if is_business_email(body.email):
+        domain = get_email_domain(body.email)
+        org_repo = OrgRepository(db)
+        org = await org_repo.get_by_domain(domain)
+        if not org:
+            org = await org_repo.create(name=domain_to_org_name(domain), domain=domain)
+            org_role = "owner"
+        else:
+            org_role = "member"
+        org_id = org.id
+
     user = await repo.create(
         email=body.email,
-        hashed_password=hash_password(body.password),
-        name=body.name,
-        role=body.role,
-        company_name=body.company_name,
-        company_stage=body.company_stage,
-        industry=body.industry,
-        team_size=body.team_size,
-        current_challenges=body.current_challenges,
-        goals=body.goals,
-        onboarding_complete=bool(body.name and body.role),
+        hashed_password=await asyncio.to_thread(hash_password, body.password),
+        org_id=org_id,
+        org_role=org_role,
     )
     token = create_token(str(user.id))
     return LoginResponse(
@@ -52,7 +63,7 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     repo = UserRepository(db)
     user = await repo.get_by_email(body.email)
-    if not user or not verify_password(body.password, user.hashed_password):
+    if not user or not await asyncio.to_thread(verify_password, body.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_token(str(user.id))
     return LoginResponse(

@@ -24,9 +24,8 @@ function renderMarkdown(text: string): string {
 }
 
 export default function AgentMessageComponent({ message }: AgentMessageProps) {
-    const [expanded, setExpanded] = useState(true);
-
     const isBoardroom = message.isSynthesis || message.agent_name === 'Boardroom';
+    const [expanded, setExpanded] = useState(isBoardroom);
 
     return (
         <div className="animate-fade-in-up mb-4">

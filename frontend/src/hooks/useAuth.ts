@@ -13,6 +13,8 @@ export interface AuthUser {
     team_size: string | null;
     current_challenges: string | null;
     goals: string | null;
+    org_id: string | null;
+    org_role: string | null;
     onboarding_complete: boolean;
 }
 
@@ -23,20 +25,13 @@ interface AuthState {
     isLoading: boolean;
     login: (email: string, password: string) => Promise<void>;
     signup: (data: SignupData) => Promise<void>;
+    refreshUser: () => Promise<void>;
     logout: () => void;
 }
 
 export interface SignupData {
     email: string;
     password: string;
-    name: string;
-    role: string;
-    company_name?: string;
-    company_stage?: string;
-    industry?: string;
-    team_size?: string;
-    current_challenges?: string;
-    goals?: string;
 }
 
 const TOKEN_KEY = 'execos_token';
@@ -107,7 +102,16 @@ export function useAuthState(): AuthState {
         setUser(null);
     };
 
-    return { user, token, isAuthenticated: !!user, isLoading, login, signup, logout };
+    const refreshUser = async () => {
+        const t = localStorage.getItem(TOKEN_KEY);
+        if (!t) return;
+        const res = await fetch(`${API_BASE}/auth/me`, {
+            headers: { Authorization: `Bearer ${t}` },
+        });
+        if (res.ok) setUser(await res.json());
+    };
+
+    return { user, token, isAuthenticated: !!user, isLoading, login, signup, refreshUser, logout };
 }
 
 export function useAuth() {
