@@ -18,7 +18,6 @@ yielded events — this module never touches the DB directly.
 """
 
 import asyncio
-import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncGenerator
 
@@ -39,8 +38,9 @@ from app.agents.events import (
 )
 from app.agents.utils import build_user_context, build_history
 from app.memory.service import search_memory, add_memory
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Shared thread pool — all sync LLM calls run here
 _executor = ThreadPoolExecutor(max_workers=8)

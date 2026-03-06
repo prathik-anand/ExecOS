@@ -12,14 +12,14 @@ Falls back to keyword matching if the LLM call fails.
 """
 
 import json
-import logging
 import os
 import re
 from dataclasses import dataclass
 
 from app.agents.prompts import AGENTS, AGENT_KEYS
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Domain expertise map — which CXOs own which business domains

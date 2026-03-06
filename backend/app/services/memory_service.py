@@ -6,10 +6,11 @@ Best-effort: all calls are wrapped in try/except so a Mem0 outage
 never breaks the main chat flow.
 """
 
-import logging
 import os
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 _mem0_client = None
 

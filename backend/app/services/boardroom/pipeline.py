@@ -6,7 +6,6 @@ Yields SSE event dicts. No HTTP, no DB queries — pure pipeline logic.
 """
 
 import asyncio
-import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncGenerator
 
@@ -31,8 +30,9 @@ from app.services.boardroom.events import (
 )
 from app.utils.llm import build_user_context, build_history
 from app.services.memory_service import search_memory, add_memory
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 _executor = ThreadPoolExecutor(max_workers=8)
 
 

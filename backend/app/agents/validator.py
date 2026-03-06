@@ -19,11 +19,12 @@ SSE: yields a "validation" event so the frontend can show a "🔍 Reviewing…" 
 """
 
 import json
-import logging
 import os
 import re
 
-logger = logging.getLogger(__name__)
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Minimum acceptable score (0-10) to pass without revision
 PASS_THRESHOLD = 6.5
