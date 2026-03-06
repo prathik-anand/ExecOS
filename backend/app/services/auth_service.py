@@ -6,10 +6,10 @@ No HTTP, no DB queries, no routing.
 """
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
-from jose import jwt, JWTError
+from jose import JWTError, jwt
 
 SECRET_KEY = os.getenv("JWT_SECRET", "change-me-in-production")
 ALGORITHM = "HS256"
@@ -25,7 +25,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=EXPIRE_HOURS)
+    expire = datetime.now(UTC) + timedelta(hours=EXPIRE_HOURS)
     return jwt.encode(
         {"sub": user_id, "exp": expire},
         SECRET_KEY,

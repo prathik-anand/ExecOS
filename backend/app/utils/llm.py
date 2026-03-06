@@ -6,6 +6,7 @@ Used by the boardroom services layer only.
 """
 
 import os
+
 from crewai import LLM
 
 
@@ -44,6 +45,4 @@ def build_history(conversation_history: list, max_turns: int = 6) -> str:
     if not conversation_history:
         return "No previous conversation."
     recent = conversation_history[-max_turns:]
-    return "\n".join(
-        f"{m.get('role', 'user').upper()}: {m.get('content', '')}" for m in recent
-    )
+    return "\n".join(f"{m.get('role', 'user').upper()}: {m.get('content', '')}" for m in recent)

@@ -6,13 +6,13 @@ No HTTP routing, no business logic — just authentication gate.
 """
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.utils.database import get_db
 from app.models.user import User
 from app.services.auth_service import decode_token
+from app.utils.database import get_db
 
 _bearer = HTTPBearer()
 

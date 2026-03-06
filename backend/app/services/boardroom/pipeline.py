@@ -6,30 +6,30 @@ Yields SSE event dicts. No HTTP, no DB queries — pure pipeline logic.
 """
 
 import asyncio
+from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
-from typing import AsyncGenerator
 
-from app.services.boardroom.orchestrator import (
-    orchestrate_sync,
-    OrchestratorPlan,
-    SubQuery,
-)
-from app.services.boardroom.executor import run_sub_query
-from app.services.boardroom.validator import validate_response_sync, MAX_RETRIES
-from app.services.boardroom.synthesizer import synthesize
 from app.services.boardroom.events import (
+    agent_reasoning_event,
+    agent_response_event,
+    done_event,
+    error_event,
     orchestration_event,
     routing_event,
-    agent_reasoning_event,
-    validation_event,
-    agent_response_event,
-    synthesis_start_event,
     synthesis_event,
-    error_event,
-    done_event,
+    synthesis_start_event,
+    validation_event,
 )
-from app.utils.llm import build_user_context, build_history
-from app.services.memory_service import search_memory, add_memory
+from app.services.boardroom.executor import run_sub_query
+from app.services.boardroom.orchestrator import (
+    OrchestratorPlan,
+    SubQuery,
+    orchestrate_sync,
+)
+from app.services.boardroom.synthesizer import synthesize
+from app.services.boardroom.validator import MAX_RETRIES, validate_response_sync
+from app.services.memory_service import add_memory, search_memory
+from app.utils.llm import build_history, build_user_context
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -48,13 +48,9 @@ async def run_pipeline(
     history_str = build_history(conversation_history)
 
     # ── 1. Memory Retrieval ───────────────────────────────────────────────────
-    memories: list[str] = await loop.run_in_executor(
-        _executor, search_memory, user_id, message
-    )
+    memories: list[str] = await loop.run_in_executor(_executor, search_memory, user_id, message)
     memories_str = (
-        "\n".join(f"- {m}" for m in memories)
-        if memories
-        else "No relevant memories yet."
+        "\n".join(f"- {m}" for m in memories) if memories else "No relevant memories yet."
     )
 
     # ── 2. Orchestration ─────────────────────────────────────────────────────
@@ -117,7 +113,7 @@ async def run_pipeline(
             yield synthesis_event(result)
         except Exception as exc:
             logger.warning("Synthesis failed: %s", exc)
-            final_response = list(all_responses.values())[0]
+            final_response = next(iter(all_responses.values()))
             yield synthesis_event(final_response)
 
     # ── 6. Memory Persistence ─────────────────────────────────────────────────
@@ -140,8 +136,7 @@ async def run_pipeline(
             "complexity": plan.complexity,
             "response_strategy": plan.response_strategy,
             "sub_queries": [
-                {"id": sq.id, "focus": sq.focus, "agents": sq.agents}
-                for sq in plan.sub_queries
+                {"id": sq.id, "focus": sq.focus, "agents": sq.agents} for sq in plan.sub_queries
             ],
         },
         "synthesis": final_response,
@@ -168,9 +163,7 @@ async def _execute_and_validate(
             _executor, validate_response_sync, sq.rewritten_query, text, context_str
         )
         val_events.append(
-            validation_event(
-                agent_key, vr.passed, vr.overall_score, vr.scores, vr.critique
-            )
+            validation_event(agent_key, vr.passed, vr.overall_score, vr.scores, vr.critique)
         )
         if not vr.passed:
             needs_revision[agent_key] = vr.revised_query or sq.rewritten_query

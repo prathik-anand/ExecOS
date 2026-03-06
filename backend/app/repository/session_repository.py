@@ -6,6 +6,7 @@ Single responsibility: CRUD for chat sessions. No HTTP, no business logic.
 
 import uuid
 from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,9 +17,7 @@ class SessionRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(
-        self, session_id: uuid.UUID, user_id: uuid.UUID
-    ) -> Session | None:
+    async def get_by_id(self, session_id: uuid.UUID, user_id: uuid.UUID) -> Session | None:
         result = await self.db.execute(
             select(Session).where(
                 Session.id == session_id,

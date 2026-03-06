@@ -5,17 +5,18 @@ All pipeline logic is in services/boardroom. All DB writes go through repository
 
 import json
 from datetime import datetime
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
+from app.repository.message_repository import MessageRepository
+from app.repository.session_repository import SessionRepository
+from app.schemas.chat_schemas import ChatRequest
+from app.services.boardroom import run_pipeline
 from app.utils.database import get_db
 from app.utils.security import get_current_user
-from app.schemas.chat_schemas import ChatRequest
-from app.repository.session_repository import SessionRepository
-from app.repository.message_repository import MessageRepository
-from app.services.boardroom import run_pipeline
-from app.models.user import User
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -40,9 +41,7 @@ async def chat(
         try:
             from uuid import UUID
 
-            session = await session_repo.get_by_id(
-                UUID(body.session_id), current_user.id
-            )
+            session = await session_repo.get_by_id(UUID(body.session_id), current_user.id)
         except Exception:
             pass
     if session is None:
@@ -121,7 +120,7 @@ async def chat(
                         history.append(
                             {
                                 "role": "assistant",
-                                "content": list(agent_responses.values())[0],
+                                "content": next(iter(agent_responses.values())),
                                 "timestamp": datetime.utcnow().isoformat(),
                             }
                         )

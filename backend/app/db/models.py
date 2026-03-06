@@ -4,7 +4,8 @@ SQLAlchemy async models — PostgreSQL via asyncpg.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, Text, ForeignKey, JSON, Integer
+
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -16,12 +17,8 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    email: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False, index=True
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Profile / onboarding fields
@@ -49,9 +46,7 @@ class User(Base):
 class Session(Base):
     __tablename__ = "sessions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
@@ -87,9 +82,7 @@ class ChatMessage(Base):
 
     __tablename__ = "chat_messages"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sessions.id"), nullable=False, index=True
     )
@@ -104,9 +97,7 @@ class ChatMessage(Base):
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Agent-specific fields (null for user messages)
-    agent_key: Mapped[str | None] = mapped_column(
-        String(50), nullable=True
-    )  # e.g. "CFO"
+    agent_key: Mapped[str | None] = mapped_column(String(50), nullable=True)  # e.g. "CFO"
     agent_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Structured metadata: intent, complexity, scores, sub_queries, etc.
@@ -117,9 +108,7 @@ class ChatMessage(Base):
     validation_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     # Relationships
     session: Mapped["Session"] = relationship("Session", back_populates="messages")

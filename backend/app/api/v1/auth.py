@@ -4,30 +4,29 @@ Org auto-created for business email domains on signup.
 """
 
 import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.utils.database import get_db
-from app.utils.security import get_current_user
-from app.utils.email_utils import is_business_email, get_email_domain, domain_to_org_name
+from app.models.user import User
+from app.repository.org_repository import OrgRepository
+from app.repository.user_repository import UserRepository
 from app.schemas.auth_schemas import (
-    SignupRequest,
     LoginRequest,
     LoginResponse,
-    UserProfileResponse,
+    SignupRequest,
     UpdateProfileRequest,
+    UserProfileResponse,
 )
-from app.repository.user_repository import UserRepository
-from app.repository.org_repository import OrgRepository
-from app.services.auth_service import hash_password, verify_password, create_token
-from app.models.user import User
+from app.services.auth_service import create_token, hash_password, verify_password
+from app.utils.database import get_db
+from app.utils.email_utils import domain_to_org_name, get_email_domain, is_business_email
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post(
-    "/signup", response_model=LoginResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/signup", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
     repo = UserRepository(db)
     if await repo.get_by_email(body.email):
@@ -54,21 +53,19 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
         org_role=org_role,
     )
     token = create_token(str(user.id))
-    return LoginResponse(
-        access_token=token, user=UserProfileResponse.model_validate(user)
-    )
+    return LoginResponse(access_token=token, user=UserProfileResponse.model_validate(user))
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     repo = UserRepository(db)
     user = await repo.get_by_email(body.email)
-    if not user or not await asyncio.to_thread(verify_password, body.password, user.hashed_password):
+    if not user or not await asyncio.to_thread(
+        verify_password, body.password, user.hashed_password
+    ):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_token(str(user.id))
-    return LoginResponse(
-        access_token=token, user=UserProfileResponse.model_validate(user)
-    )
+    return LoginResponse(access_token=token, user=UserProfileResponse.model_validate(user))
 
 
 @router.get("/me", response_model=UserProfileResponse)

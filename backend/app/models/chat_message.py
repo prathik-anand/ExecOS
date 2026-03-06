@@ -14,7 +14,8 @@ role values:
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, Text, ForeignKey, JSON, Integer, Float
+
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,9 +25,7 @@ from app.models.base import Base
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sessions.id"), nullable=False, index=True
     )
@@ -49,8 +48,6 @@ class ChatMessage(Base):
     validation_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     session: Mapped["Session"] = relationship("Session", back_populates="messages")  # noqa: F821

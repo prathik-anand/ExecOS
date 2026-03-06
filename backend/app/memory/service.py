@@ -4,6 +4,7 @@ Set MEM0_API_KEY env var to switch to Mem0 cloud.
 """
 
 import os
+
 from mem0 import Memory, MemoryClient
 
 _mem0_instance = None

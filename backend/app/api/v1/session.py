@@ -3,15 +3,16 @@ Session API controller — session metadata, history list, and message loader.
 """
 
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
+from app.repository.message_repository import MessageRepository
+from app.repository.session_repository import SessionRepository
+from app.services.memory_service import count_memories
 from app.utils.database import get_db
 from app.utils.security import get_current_user
-from app.repository.session_repository import SessionRepository
-from app.repository.message_repository import MessageRepository
-from app.services.memory_service import count_memories
-from app.models.user import User
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -54,17 +55,19 @@ async def list_sessions(
     for s in sessions:
         # Derive title from first user message in conversation history
         title = "New conversation"
-        for entry in (s.conversation_history or []):
+        for entry in s.conversation_history or []:
             if entry.get("role") == "user" and entry.get("content"):
                 raw = entry["content"]
                 title = raw[:60] + ("…" if len(raw) > 60 else "")
                 break
-        result.append({
-            "id": str(s.id),
-            "title": title,
-            "created_at": s.created_at.isoformat(),
-            "last_active_at": s.last_active_at.isoformat(),
-        })
+        result.append(
+            {
+                "id": str(s.id),
+                "title": title,
+                "created_at": s.created_at.isoformat(),
+                "last_active_at": s.last_active_at.isoformat(),
+            }
+        )
 
     return {"sessions": result}
 

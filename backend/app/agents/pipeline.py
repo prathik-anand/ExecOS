@@ -18,26 +18,26 @@ yielded events — this module never touches the DB directly.
 """
 
 import asyncio
+from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
-from typing import AsyncGenerator
 
-from app.agents.orchestrator import orchestrate_sync, OrchestratorPlan, SubQuery
-from app.agents.executor import run_sub_query
-from app.agents.validator import validate_response_sync, MAX_RETRIES
-from app.agents.synthesizer import synthesize
 from app.agents.events import (
+    agent_reasoning_event,
+    agent_response_event,
+    done_event,
+    error_event,
     orchestration_event,
     routing_event,
-    agent_reasoning_event,
-    validation_event,
-    agent_response_event,
-    synthesis_start_event,
     synthesis_event,
-    error_event,
-    done_event,
+    synthesis_start_event,
+    validation_event,
 )
-from app.agents.utils import build_user_context, build_history
-from app.memory.service import search_memory, add_memory
+from app.agents.executor import run_sub_query
+from app.agents.orchestrator import OrchestratorPlan, SubQuery, orchestrate_sync
+from app.agents.synthesizer import synthesize
+from app.agents.utils import build_history, build_user_context
+from app.agents.validator import MAX_RETRIES, validate_response_sync
+from app.memory.service import add_memory, search_memory
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -61,13 +61,9 @@ async def run_pipeline(
     history_str = build_history(conversation_history)
 
     # ── Stage 1: Memory Retrieval ────────────────────────────────────────────
-    memories: list[str] = await loop.run_in_executor(
-        _executor, search_memory, user_id, message
-    )
+    memories: list[str] = await loop.run_in_executor(_executor, search_memory, user_id, message)
     memories_str = (
-        "\n".join(f"- {m}" for m in memories)
-        if memories
-        else "No relevant memories yet."
+        "\n".join(f"- {m}" for m in memories) if memories else "No relevant memories yet."
     )
 
     # ── Stage 2: Orchestration ───────────────────────────────────────────────
@@ -133,10 +129,10 @@ async def run_pipeline(
             yield synthesis_event(result)
         except Exception as exc:
             logger.warning("Synthesis failed: %s", exc)
-            final_response = list(all_responses.values())[0]
+            final_response = next(iter(all_responses.values()))
             yield synthesis_event(final_response)
     else:
-        final_response = list(all_responses.values())[0] if all_responses else ""
+        final_response = next(iter(all_responses.values())) if all_responses else ""
 
     # ── Stage 6: Memory Persistence ──────────────────────────────────────────
     asyncio.create_task(
@@ -161,8 +157,7 @@ async def run_pipeline(
             "complexity": plan.complexity,
             "response_strategy": plan.response_strategy,
             "sub_queries": [
-                {"id": sq.id, "focus": sq.focus, "agents": sq.agents}
-                for sq in plan.sub_queries
+                {"id": sq.id, "focus": sq.focus, "agents": sq.agents} for sq in plan.sub_queries
             ],
         },
         "synthesis": final_response,
@@ -200,9 +195,7 @@ async def _execute_and_validate(
             _executor, validate_response_sync, sq.rewritten_query, text, context_str
         )
         val_events.append(
-            validation_event(
-                agent_key, vr.passed, vr.overall_score, vr.scores, vr.critique
-            )
+            validation_event(agent_key, vr.passed, vr.overall_score, vr.scores, vr.critique)
         )
         if not vr.passed:
             needs_revision[agent_key] = vr.revised_query or sq.rewritten_query
@@ -255,11 +248,7 @@ async def _execute_and_validate(
 
 
 def _store_memory(user_id: str, message: str, response: str, agents: list[str]):
-    content = (
-        f"User asked: {message}\n"
-        f"Agents: {', '.join(agents)}\n"
-        f"Key advice: {response[:600]}"
-    )
+    content = f"User asked: {message}\nAgents: {', '.join(agents)}\nKey advice: {response[:600]}"
     add_memory(user_id, content, metadata={"agents": agents})
 
 

@@ -12,19 +12,29 @@ Flow:
 import asyncio
 import json
 import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
+from app.repository.user_repository import UserRepository
 from app.utils.database import get_db
 from app.utils.security import get_current_user
-from app.repository.user_repository import UserRepository
-from app.models.user import User
 
 router = APIRouter(prefix="/onboard", tags=["onboarding"])
 
 # Questions we want to cover — the AI generates the actual phrasing dynamically
-REQUIRED_FIELDS = ["name", "role", "company_name", "company_stage", "industry", "team_size", "goals", "challenges"]
+REQUIRED_FIELDS = [
+    "name",
+    "role",
+    "company_name",
+    "company_stage",
+    "industry",
+    "team_size",
+    "goals",
+    "challenges",
+]
 MIN_QUESTIONS = 6
 MAX_QUESTIONS = 10
 
@@ -46,6 +56,7 @@ class CompleteRequest(BaseModel):
 def _call_llm(prompt: str) -> str:
     """Call LLM via litellm (bundled with crewai)."""
     import litellm
+
     response = litellm.completion(
         model=os.getenv("LLM_MODEL", "gemini/gemini-2.0-flash"),
         api_key=os.getenv("GOOGLE_API_KEY"),
@@ -109,11 +120,22 @@ Return JSON with exactly these keys:
             fallbacks = {
                 "name": {"question": "First, what's your name?", "field": "name"},
                 "role": {"question": "What's your role or title?", "field": "role"},
-                "company_name": {"question": "What's your company or project called?", "field": "company_name"},
+                "company_name": {
+                    "question": "What's your company or project called?",
+                    "field": "company_name",
+                },
                 "company_stage": {
                     "question": "What stage is your company at?",
                     "field": "company_stage",
-                    "options": ["Pre-idea", "Idea / Concept", "MVP / Building", "Early Traction", "PMF Found", "Scaling", "Growth"],
+                    "options": [
+                        "Pre-idea",
+                        "Idea / Concept",
+                        "MVP / Building",
+                        "Early Traction",
+                        "PMF Found",
+                        "Scaling",
+                        "Growth",
+                    ],
                 },
                 "industry": {"question": "Which industry are you in?", "field": "industry"},
                 "team_size": {
@@ -121,10 +143,18 @@ Return JSON with exactly these keys:
                     "field": "team_size",
                     "options": ["Solo founder", "2–5", "6–15", "16–50", "51–200", "200+"],
                 },
-                "goals": {"question": "What's your primary goal for the next 90 days?", "field": "goals"},
-                "challenges": {"question": "What's your biggest challenge right now?", "field": "challenges"},
+                "goals": {
+                    "question": "What's your primary goal for the next 90 days?",
+                    "field": "goals",
+                },
+                "challenges": {
+                    "question": "What's your biggest challenge right now?",
+                    "field": "challenges",
+                },
             }
-            return fallbacks.get(remaining[0], {"question": "Anything else you'd like to share?", "field": "other"})
+            return fallbacks.get(
+                remaining[0], {"question": "Anything else you'd like to share?", "field": "other"}
+            )
         return None
 
 
@@ -205,7 +235,16 @@ async def complete_onboarding(
         "onboarding_complete": True,
     }
     # Apply extracted flat fields (skip None values)
-    for key in ("name", "role", "company_name", "company_stage", "industry", "team_size", "current_challenges", "goals"):
+    for key in (
+        "name",
+        "role",
+        "company_name",
+        "company_stage",
+        "industry",
+        "team_size",
+        "current_challenges",
+        "goals",
+    ):
         val = extracted.get(key)
         if val and val != "null":
             update_fields[key] = val

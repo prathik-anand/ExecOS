@@ -2,8 +2,9 @@
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, Text, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -12,12 +13,8 @@ from app.models.base import Base
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    email: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False, index=True
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Org membership (nullable = personal/no-org account)
@@ -25,7 +22,8 @@ class User(Base):
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True, index=True
     )
     org_role: Mapped[str | None] = mapped_column(
-        String(50), nullable=True  # 'owner' | 'admin' | 'member'
+        String(50),
+        nullable=True,  # 'owner' | 'admin' | 'member'
     )
 
     # Key profile fields — populated during onboarding, used for agent context

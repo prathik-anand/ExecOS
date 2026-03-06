@@ -16,8 +16,8 @@ Event types:
   done              — stream terminated
 """
 
-from app.agents.prompts import AGENTS
 from app.agents.orchestrator import OrchestratorPlan
+from app.agents.prompts import AGENTS
 
 
 def orchestration_event(plan: OrchestratorPlan, unique_agents: list[str]) -> dict:
@@ -28,8 +28,7 @@ def orchestration_event(plan: OrchestratorPlan, unique_agents: list[str]) -> dic
         "response_strategy": plan.response_strategy,
         "reasoning": plan.reasoning,
         "sub_queries": [
-            {"id": sq.id, "focus": sq.focus, "agents": sq.agents}
-            for sq in plan.sub_queries
+            {"id": sq.id, "focus": sq.focus, "agents": sq.agents} for sq in plan.sub_queries
         ],
         "agents": unique_agents,
         "content": _routing_summary(plan),
@@ -37,11 +36,7 @@ def orchestration_event(plan: OrchestratorPlan, unique_agents: list[str]) -> dic
 
 
 def routing_event(unique_agents: list[str]) -> dict:
-    names = [
-        f"{AGENTS[k]['emoji']} {AGENTS[k]['name']}"
-        for k in unique_agents
-        if k in AGENTS
-    ]
+    names = [f"{AGENTS[k]['emoji']} {AGENTS[k]['name']}" for k in unique_agents if k in AGENTS]
     return {
         "type": "routing",
         "content": f"Routing to: {', '.join(names)}",

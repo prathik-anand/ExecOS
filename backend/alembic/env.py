@@ -5,23 +5,25 @@ Imports all ORM models from app/models so autogenerate works correctly.
 DATABASE_URL is read from the .env file via os.getenv.
 """
 
-import os
 import asyncio
+import os
 from logging.config import fileConfig
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from sqlalchemy.ext.asyncio import create_async_engine
+
+import app.models.chat_message
+import app.models.invitation
+import app.models.organization
+import app.models.session
+import app.models.user  # noqa: F401
 from alembic import context
 
 # Load all models so autogenerate can detect them
 from app.models.base import Base
-import app.models.organization  # noqa: F401
-import app.models.invitation  # noqa: F401
-import app.models.user  # noqa: F401
-import app.models.session  # noqa: F401
-import app.models.chat_message  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

@@ -7,6 +7,7 @@ Each event type (user, routing, agent, validation, synthesis) maps to one method
 
 import uuid
 from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,9 +83,7 @@ class MessageRepository:
             extra_data=extra_data,
         )
 
-    def add_synthesis(
-        self, session_id: uuid.UUID, user_id: uuid.UUID, content: str
-    ) -> ChatMessage:
+    def add_synthesis(self, session_id: uuid.UUID, user_id: uuid.UUID, content: str) -> ChatMessage:
         return self._new(session_id, user_id, role="synthesis", content=content)
 
     async def get_by_session(self, session_id: uuid.UUID) -> list[ChatMessage]:

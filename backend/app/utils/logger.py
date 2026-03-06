@@ -8,17 +8,16 @@ Usage:
 
 import logging
 import sys
-from typing import Optional
 
 
 class ExecOSFormatter(logging.Formatter):
     """Coloured, typed log formatter."""
 
     LEVEL_COLOURS = {
-        logging.DEBUG: "\033[36m",     # cyan
-        logging.INFO: "\033[32m",      # green
-        logging.WARNING: "\033[33m",   # yellow
-        logging.ERROR: "\033[31m",     # red
+        logging.DEBUG: "\033[36m",  # cyan
+        logging.INFO: "\033[32m",  # green
+        logging.WARNING: "\033[33m",  # yellow
+        logging.ERROR: "\033[31m",  # red
         logging.CRITICAL: "\033[35m",  # magenta
     }
     RESET = "\033[0m"
@@ -28,14 +27,14 @@ class ExecOSFormatter(logging.Formatter):
         colour = self.LEVEL_COLOURS.get(record.levelno, "")
         grey = "\033[90m"
         level_tag = f"{colour}{self.BOLD}[{record.levelname}]{self.RESET}"
-        name_tag = f"{grey}{record.name}{self.RESET}"
+        location = f"{grey}{record.filename}:{record.lineno}{self.RESET}"
         body = record.getMessage()
         if record.exc_info:
             body = f"{body}\n{self.formatException(record.exc_info)}"
-        return f"{level_tag} {name_tag} — {body}"
+        return f"{level_tag} {location} — {body}"
 
 
-def get_logger(name: str, level: Optional[int] = None) -> logging.Logger:
+def get_logger(name: str, level: int | None = None) -> logging.Logger:
     """Return a namespaced ExecOS logger.
 
     Args:

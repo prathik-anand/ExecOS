@@ -7,6 +7,7 @@ DB initialisation runs once on startup via the lifespan manager.
 
 import os
 from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,9 +15,9 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.utils.database import init_db
 from app.api.router import router as api_router
-from app.utils.logger import get_logger, configure_root
+from app.utils.database import init_db
+from app.utils.logger import configure_root, get_logger
 
 configure_root()
 logger = get_logger(__name__)

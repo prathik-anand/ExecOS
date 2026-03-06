@@ -4,7 +4,8 @@ main.py mounts this single router.
 """
 
 from fastapi import APIRouter
-from app.api.v1 import auth, chat, session, onboard, invitations
+
+from app.api.v1 import auth, chat, invitations, onboard, session
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth.router)

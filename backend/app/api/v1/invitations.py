@@ -7,15 +7,16 @@ POST /api/v1/invitations/accept    — accept an invite by token
 """
 
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.utils.database import get_db
-from app.utils.security import get_current_user
+from app.models.user import User
 from app.repository.org_repository import OrgRepository
 from app.repository.user_repository import UserRepository
-from app.models.user import User
+from app.utils.database import get_db
+from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
@@ -96,7 +97,9 @@ async def accept_invitation(
     if invite.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Invitation has expired")
     if invite.email.lower() != current_user.email.lower():
-        raise HTTPException(status_code=403, detail="This invitation is for a different email address")
+        raise HTTPException(
+            status_code=403, detail="This invitation is for a different email address"
+        )
 
     # Accept invite and assign user to org
     await org_repo.accept_invite(invite)

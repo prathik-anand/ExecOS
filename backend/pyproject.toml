@@ -27,3 +27,55 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+indent-width = 4
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "B", "UP", "N", "RUF",
+    "S", "C90", "T20", "PTH", "PL", "SIM", "TRY", "PERF",
+]
+ignore = [
+    "E501",    # line too long (handled by formatter)
+    "B008",    # FastAPI Depends() pattern
+    "S101",    # assert in tests
+    "TRY003",  # too strict on raise messages
+    "PLR0913", # too many args — common in FastAPI
+    "PLR2004", # magic value comparison — noisy
+    "ERA001",  # allow commented-out code during development
+    "PLC0415", # lazy imports in try-blocks are a valid pattern
+    "S105",    # false positive — "bearer" is not a hardcoded password
+    "RUF001",  # en-dashes in display strings are intentional
+    "PLW0603", # global singleton pattern (lazy init) is intentional
+    "RUF006",  # fire-and-forget asyncio.create_task is intentional
+    "RUF012",  # ClassVar annotation on class-level dicts — low priority
+    "W291",    # trailing whitespace inside multiline strings (prompts) — can't auto-fix
+    "TRY400",  # logger.error vs logger.exception — minor, address in follow-up
+    "B904",    # raise-without-from in except — address in follow-up
+    "C901",    # complex functions — refactoring task, not a style pass
+    "PLR0912", # too many branches — refactoring task
+    "S110",    # try-except-pass is intentional for best-effort operations
+    "TRY300",  # return-in-try — pedantic, common pattern
+    "TRY301",  # raise-in-try — pedantic, common pattern
+    "SIM108",  # ternary would remove inline comments explaining the logic
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S", "T20"]
+"**/migrations/**/*.py" = ["E501", "N"]
+"alembic/env.py" = ["E402"]  # must load env before importing models
+"main.py" = ["E402"]         # must call load_dotenv() before importing app modules
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

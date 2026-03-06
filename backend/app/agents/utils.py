@@ -54,6 +54,4 @@ def build_history(conversation_history: list, max_turns: int = 6) -> str:
         return "No previous conversation."
 
     recent = conversation_history[-max_turns:]
-    return "\n".join(
-        f"{m.get('role', 'user').upper()}: {m.get('content', '')}" for m in recent
-    )
+    return "\n".join(f"{m.get('role', 'user').upper()}: {m.get('content', '')}" for m in recent)

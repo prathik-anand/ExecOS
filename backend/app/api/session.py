@@ -3,6 +3,7 @@ GET /api/session — returns current user's profile + memory count.
 """
 
 from fastapi import APIRouter, Depends
+
 from app.auth.dependencies import get_current_user
 from app.db.models import User
 from app.memory.service import memory_count

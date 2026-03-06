@@ -4,7 +4,7 @@ Executor — runs a SubQuery through its CXO agents via CrewAI.
 Single responsibility: agent execution only. No validation, no synthesis, no SSE.
 """
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Crew, Process, Task
 
 from app.services.boardroom.orchestrator import SubQuery
 from app.services.boardroom.prompts import AGENTS
@@ -58,9 +58,7 @@ def run_sub_query(
             ),
             agent=agent,
         )
-        crew = Crew(
-            agents=[agent], tasks=[task], process=Process.sequential, verbose=False
-        )
+        crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=False)
         results[key] = str(crew.kickoff().raw)
 
     return results

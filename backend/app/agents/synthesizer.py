@@ -11,10 +11,10 @@ Returns the raw synthesis string. No SSE, no memory, no validation.
 Designed to be called via loop.run_in_executor.
 """
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Crew, Process, Task
 
-from app.agents.prompts import AGENTS
 from app.agents.orchestrator import OrchestratorPlan
+from app.agents.prompts import AGENTS
 from app.agents.utils import get_llm
 
 
@@ -30,12 +30,10 @@ def synthesize(
     If only one agent responded, returns that response directly (no LLM call).
     """
     if len(agent_responses) == 1:
-        return list(agent_responses.values())[0]
+        return next(iter(agent_responses.values()))
 
     llm = get_llm()
-    description = _build_synthesis_description(
-        original_message, plan, context_str, agent_responses
-    )
+    description = _build_synthesis_description(original_message, plan, context_str, agent_responses)
 
     boardroom_agent = Agent(
         role="Boardroom Orchestrator",

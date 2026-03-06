@@ -1,9 +1,10 @@
+
+from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from sqlalchemy import select
+
 from app.db.database import AsyncSessionLocal
 from app.db.models import Session
-import uuid
 
 
 class SessionMiddleware(BaseHTTPMiddleware):
@@ -12,9 +13,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
 
         if session_id:
             async with AsyncSessionLocal() as db:
-                result = await db.execute(
-                    select(Session).where(Session.id == session_id)
-                )
+                result = await db.execute(select(Session).where(Session.id == session_id))
                 session = result.scalar_one_or_none()
 
                 if session is None:

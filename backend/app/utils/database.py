@@ -6,9 +6,9 @@ No models, no business logic, no HTTP concerns.
 """
 
 import os
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -42,12 +42,12 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     """Create all tables on startup (idempotent — safe to call every time)."""
     # Import here to avoid circular imports; models must be imported before create_all
-    from app.models.base import Base
-    import app.models.organization  # noqa: F401
-    import app.models.invitation  # noqa: F401
+    import app.models.chat_message
+    import app.models.invitation
+    import app.models.organization
+    import app.models.session
     import app.models.user  # noqa: F401
-    import app.models.session  # noqa: F401
-    import app.models.chat_message  # noqa: F401
+    from app.models.base import Base
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -3,18 +3,16 @@ Async SQLAlchemy engine and session factory — PostgreSQL via asyncpg.
 """
 
 import os
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.db.models import Base
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql+asyncpg://postgres:execos@localhost/execos"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:execos@localhost/execos")
 
 engine = create_async_engine(DATABASE_URL, echo=False, pool_size=10, max_overflow=20)
 
-AsyncSessionFactory = async_sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
-)
+AsyncSessionFactory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 async def init_db():

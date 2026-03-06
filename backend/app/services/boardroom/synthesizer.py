@@ -4,7 +4,7 @@ Synthesizer — merges multiple CXO responses into one boardroom briefing.
 Single responsibility: synthesis only. No SSE, no DB, no validation.
 """
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Crew, Process, Task
 
 from app.services.boardroom.orchestrator import OrchestratorPlan
 from app.services.boardroom.prompts import AGENTS
@@ -36,9 +36,7 @@ def synthesize(
         for k, v in agent_responses.items()
         if k in AGENTS
     )
-    sub_lines = "\n".join(
-        f"• {sq.focus}: {', '.join(sq.agents)}" for sq in plan.sub_queries
-    )
+    sub_lines = "\n".join(f"• {sq.focus}: {', '.join(sq.agents)}" for sq in plan.sub_queries)
     description = (
         f'Synthesise for: "{original_message}"\n\n'
         f"Intent: {plan.intent} | Complexity: {plan.complexity}\n"

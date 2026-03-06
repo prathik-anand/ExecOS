@@ -2,14 +2,15 @@
 Org Repository — CRUD for organizations and invitations.
 """
 
-import uuid
 import secrets
+import uuid
 from datetime import datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.organization import Organization
 from app.models.invitation import Invitation
+from app.models.organization import Organization
 
 
 class OrgRepository:
@@ -17,15 +18,11 @@ class OrgRepository:
         self.db = db
 
     async def get_by_id(self, org_id: uuid.UUID) -> Organization | None:
-        result = await self.db.execute(
-            select(Organization).where(Organization.id == org_id)
-        )
+        result = await self.db.execute(select(Organization).where(Organization.id == org_id))
         return result.scalar_one_or_none()
 
     async def get_by_domain(self, domain: str) -> Organization | None:
-        result = await self.db.execute(
-            select(Organization).where(Organization.domain == domain)
-        )
+        result = await self.db.execute(select(Organization).where(Organization.domain == domain))
         return result.scalar_one_or_none()
 
     async def create(self, name: str, domain: str | None = None) -> Organization:
@@ -37,9 +34,7 @@ class OrgRepository:
     # --- Invitations ---
 
     async def get_invite_by_token(self, token: str) -> Invitation | None:
-        result = await self.db.execute(
-            select(Invitation).where(Invitation.token == token)
-        )
+        result = await self.db.execute(select(Invitation).where(Invitation.token == token))
         return result.scalar_one_or_none()
 
     async def get_pending_invites_for_org(self, org_id: uuid.UUID) -> list[Invitation]:

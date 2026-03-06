@@ -1,20 +1,20 @@
 # schemas package
 from app.schemas.auth_schemas import (
-    SignupRequest,
     LoginRequest,
     LoginResponse,
-    UserProfileResponse,
+    SignupRequest,
     UpdateProfileRequest,
+    UserProfileResponse,
 )
 from app.schemas.chat_schemas import ChatRequest
 from app.schemas.session_schemas import SessionResponse
 
 __all__ = [
-    "SignupRequest",
+    "ChatRequest",
     "LoginRequest",
     "LoginResponse",
-    "UserProfileResponse",
-    "UpdateProfileRequest",
-    "ChatRequest",
     "SessionResponse",
+    "SignupRequest",
+    "UpdateProfileRequest",
+    "UserProfileResponse",
 ]

@@ -8,10 +8,10 @@ Public API:
     run_sub_query(sq, context_str, memories_str, history_str) -> dict[str, str]
 """
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Crew, Process, Task
 
-from app.agents.prompts import AGENTS
 from app.agents.orchestrator import SubQuery
+from app.agents.prompts import AGENTS
 from app.agents.utils import get_llm
 
 
@@ -53,9 +53,7 @@ def run_sub_query(
             expected_output=_build_expected_output(spec),
             agent=agent,
         )
-        crew = Crew(
-            agents=[agent], tasks=[task], process=Process.sequential, verbose=False
-        )
+        crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=False)
         results[key] = str(crew.kickoff().raw)
 
     return results

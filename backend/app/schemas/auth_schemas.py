@@ -1,8 +1,10 @@
 """Auth Pydantic schemas — request/response contracts for auth endpoints."""
 
 from __future__ import annotations
+
 import uuid
 from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, Field
 
 

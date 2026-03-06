@@ -92,9 +92,7 @@ def get_completion_message(context: dict) -> str:
     stage = context.get("company_stage", "")
     challenges = context.get("current_challenges", "")
 
-    parts = [
-        f"Welcome to the Boardroom, {name}. Your Cloud C-Suite is assembled and ready."
-    ]
+    parts = [f"Welcome to the Boardroom, {name}. Your Cloud C-Suite is assembled and ready."]
 
     if stage or challenges:
         parts.append(

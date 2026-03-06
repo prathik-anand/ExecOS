@@ -5,7 +5,8 @@ Single responsibility: expose `run_boardroom` as the public API
 for the chat endpoint. All logic lives in pipeline.py.
 """
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+
 from app.agents.pipeline import run_pipeline
 
 

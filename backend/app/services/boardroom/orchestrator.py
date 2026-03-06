@@ -16,7 +16,7 @@ import os
 import re
 from dataclasses import dataclass
 
-from app.agents.prompts import AGENTS, AGENT_KEYS
+from app.agents.prompts import AGENT_KEYS, AGENTS
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -362,9 +362,7 @@ def orchestrate_sync(
             f"  {k}: {AGENTS[k]['name']} ({AGENTS[k]['emoji']})" for k in AGENT_KEYS
         )
         domain_list = "\n".join(
-            f"  {k}: {', '.join(domains[:6])}"
-            for k, domains in DOMAIN_MAP.items()
-            if k in AGENTS
+            f"  {k}: {', '.join(domains[:6])}" for k, domains in DOMAIN_MAP.items() if k in AGENTS
         )
 
         system_prompt = _ORCHESTRATOR_SYSTEM.format(

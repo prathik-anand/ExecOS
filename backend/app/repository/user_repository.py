@@ -3,7 +3,9 @@ User Repository — all database operations for the User model.
 
 Single responsibility: CRUD for users. No HTTP, no business logic.
 """
+
 import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
